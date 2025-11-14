@@ -1,0 +1,76 @@
+ Okay, welcome to one of the more personal theory parts of this.
+ And that's the one where I want to kind of explain ensembles of technical indicators.
+ Now an ensemble is like a combination of different things.
+ In the exact application of what at least I'm teaching you, it's combining indicators to reduce overfitting and to increase robustness.
+ By using multiple indicators like a triple moving average, three x exponential moving average,
+ and a moving average converging divergence, MACD.
+ They work similar to an ensemble model in machine learning, which involves boosting,
+ bagging, stacking different signals. What that matters does not matter unless you are a practicing dog.
+ Okay, each indicator of this captures different aspects of price behavior and their uncorrelated
+ errors average out that reduce variance and make a combined signal that's more stable and generalizable.
+ So for example, the triple moving average has lines that move around like this and together they can cross over,
+ helping each other adjust to fast snappy movements of the market.
+ The MACD measures more trend momentum and strength and is slower to react,
+ but better at confirming genuine market moves.
+ When combined, the triple exponential moving average with the TEMA, they will kind of,
+ let's say correct each other's flaws. So the EMA is more responsive to tiny moves
+ and the MACD is more about a range being measured that will give a certain kind of strength somewhere given.
+ Okay, and they help correct the, let's say inherent flaws that technical indicators have,
+ which is either false or delayed signals, which the late signals can be basically corrected by
+ any other one of them having a proper treatment of data via grid search,
+ reacting to something earlier or exiting later, something like this.
+ So either snapping out by false or delayed signal, because just in that certain case,
+ their generalization was so strong that they were able to react to that new input of data
+ accordingly in that case. That's why having sometimes two, actually that's why I do recommend,
+ I think two is better. You can have three, maybe even four, though when you start just,
+ like you can't obviously just keep adding them because at that point it starts either
+ over trade, maybe even under trade, and it starts averaging out too much, right? Like
+ there's a sweet spot there somewhere, but that's like when you start testing. And this really,
+ what I'm telling you right now is the bread and butter of this whole strategy here.
+ You can see here I've plotted TQQ, T-E-A-T-E-M-A-C-D, meaning triple exponential moving average,
+ M-A-C-D, movement MACD, right? Those two are constituting this triple NASDAQ, so this is
+ triple QQQ, triple NASDAQ, and are giving you these honestly fucking insane measures right here,
+ which results in a very clean equity curve up, very low draw, equity draw down, all things
+ considered, a strong, healthy, profitable trades amount. It's not over or under trading, I would say
+ the P&L is extremely good if you look at the buying hold returns there far below.
+ If you take my Bitcoin one that I have made with similar methodology, you see how basically
+ it's also very effective, draw down is very low, sharp is very healthy,
+ max equity draw down is 28.92%. It differs a little bit here in this table. This table here is
+ not something I programmed, but this is more like the sharp and sortino ratios are closer.
+ I'm mostly showing this in a visual because I haven't dived into the notebook just yet,
+ but just know that TradingView obviously is a very big company and calculates things a little bit
+ differently. If you start looking at some TradingView metrics here, you will see that sharp ratio,
+ like when you go here, it's actually really a weird number, though the sortino ratio is normal,
+ but that's because there's a lot of different type of frames and there's a lot of forum threats
+ about TradingView, calculating things weirdly, eye digress, in fact, there'll be tea, it's fine
+ because it's an open source Python library and TradingView isn't. I'm mostly doing this to look
+ at things like spacing of trade, experimenting and visualizing things quick and showing you how
+ these things work. The robustness and helping the overfitness not happen with two different
+ indicators, let's say you have indicator A and B help because let's say you have one that's like
+ slightly overfit and the other one isn't, they kind of become self-correcting by having a buy
+ and entry statements that can correct each other. In the same way that a false or a noise-based
+ delayed signal, sorry, a noise-based false signal or delayed signal can be corrected by the other
+ one, it's accompanying twin can also, even when you don't know it, cancel out other trades because
+ either you have buying rules that are set up up on by an OR statement or an N statement
+ or a majority statement, it really depends on how you build things. I personally
+ prefer the flexibility of OR statements. When we start diving deeper into notebooks, that's often
+ what it's going to be, but that's kind of like a kind of introduction of like the actual code
+ that I'm giving you. So by corrective measure of each other, these pieces of code, they increase
+ the robustness, if they survive out of sample, they also improve the scores a lot, if they have
+ good methodology that works with each other, like the sudden movements and snaps from the
+ three moving averages work quite well and the confirmations of trends from MACD can work quite
+ well. There's often other indicators that will work better for some assets. If you think about
+ something like gold, which I've displayed to you before, to be more of a mean reverting-based
+ asset, it might work better with an RSI. If it's more trendy, like the NASDAQ or Bitcoin
+ trend-based indicators like MACD, like moving averages, like ADX, these things work better,
+ you can also make different buy rules. You can kind of turn an RSI into a good trend indicator if
+ you define the buy rule to be at 50, to buy below the 50 value. That's because RSI is a value that
+ ranges from 100 to zero and sometimes people will have that bought or sell oversold area at 1730,
+ but they will sometimes set buy rules at these points, but you can also set it at the middle
+ point at 50, which is again different. It's all about tweaking and being creative with these things
+ and that's why in one of the earlier parts I kind of used the statement throw it at the wall and see
+ what sticks. As long as it can survive out of sample testing in many cases and can survive a
+ sensitivity analysis, another thing that we will be covering later in the notebook, like an actual
+ technical rundown, as long as it can survive those things and the out of sample testing size is
+ adequate, like at least 30, in some cases maybe 40%. I would say that's probably better if you start
+ testing for very volatile things because the proclivity for heavy drawdowns and mistakes to happen.

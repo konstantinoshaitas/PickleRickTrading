@@ -1,0 +1,99 @@
+ Alright, to continue notebook part 2. Alright, this little code block is the splitting of
+ data. Why do you split data? Data is split for the reason that you want in-sample data,
+ the training period you devised, and auto-sample data to test on. Why is this extremely important?
+ Because you need to mock up real-time testing. If you don't do this, you might be over-optimizing
+ values in the grid search. You have zero real life, like rolling forward, walk forward,
+ proof of anything ever working, and you're gonna maybe lose money. Maybe not. You can
+ make a very tight data split like basically this. You could split it to be like this. Do
+ you see how these dates are changing? The training date and the validation set become
+ very tight. This is a little more than a year. I think it could work on lower volatility
+ assets, but it really depends how you judge a certain data set. In this case, it's Bitcoin.
+ I prefer being conservative with this because as you will see later, even with very good
+ modeling, with a very good ensemble, the drawdowns will still be pretty high even in cases such
+ as how do you put it? The max drawdown will be very high because of the general exposure
+ to market. That's also why the returns are high. When you go intraday and you start
+ sizing positions more, you do limited entries. You start using stop losses. You can limit
+ these things a lot more, but it's at the cost of total returns and you have to monitor
+ a lot more. There's a lot more chance for alpha decay. There's a lot more cases that
+ can cause drift. This adds a lot of consistency. I would recommend in general a 0.6 split,
+ meaning 60% of data being basically your trading period and then 40% of testing because it
+ gives you a lot more material to compare to in real life testing. It's also the best
+ mock-up of how I did it in the first life years of trading this particular method where
+ I basically never had anyone invest money in my strategies before I personally verified
+ it to be strong for three years running. In this case, anything 0.6 or 0.7 give or take,
+ this is also technically all right, maybe 65. These are all right periods. 65, that's
+ the whole year. Right around there, I think are fine periods to do so, but because this
+ is BTC and I do prefer telling people to be a bit cautious, I think 0.6, at least for crypto,
+ so you can really verify the consistency and the generalization, generalizational ability,
+ the general, how well it generalizes, Jesus Christ, I have lost my word wizardry. Damn,
+ okay. Okay, so coming to the next code log, the triple EMA crossover grid search training set.
+ This section performs a comprehensive grid search optimization for the triple EMA crossover strategy
+ using only the training data. So that's of course what's defined here. The goal is to find the optimal
+ EMA 1, 2, 3 combination that maximizes the sharp ratio on unseen data. So the unseen data would be
+ and its ability to generalize well, where I just went into spaghetti with my words, strategy logic,
+ by when any EMA crosses above another EMA 1 above 2, 1 above 3, or EMA 2 above 3. That's something
+ I've used in the past. You can change up the logic depending on what you're trying to do. I'm
+ going to sound like a broken record, but it's very important to understand if you have an asset that
+ doesn't trend as well, you might need different logic. That's why understanding the particular
+ indicators that you're using is pretty important, right? So again, gold, more choppy, more sideways
+ actions, you might need like by rules that are more like by when RSI value is, you know, 80.
+ Sorry, sell something like this, right? But you can look that up in your own time, because,
+ you know, in this case, we're doing trends. So here are parameter definitions, a grid search,
+ we talked about this, it's going to be doing a test of every combination. So here we are giving
+ ranges for it to look, you know, so we have EMA 1, which is the shortest moving average, right?
+ It's going to be the most snappy one. It might be the most noisy one, because it's the shortest one,
+ right? So it's going to be smoothed out a lot less, but it's still a very important
+ component of it, of course. You're going to give it the shortest ranges, you see that these ranges,
+ they're not connecting. A little trick that you can do, which is important to keep in mind going
+ forward, is that you can, you see these steps here, right? Like the way these lists work,
+ it's going to give you the indicators from 4 to 40, 50 to 90, 120 to 250.
+ We were talking about computation in the beginning. This one's going in steps of one,
+ as you can see here, right? In the print, again, prints very important, four, five, six, seven,
+ eight. If I make this a scrollable element, you see how EMA 3 is going 120, 123, 126,
+ d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d-d. Right? It's going in larger steps.
+ Something you can do in grid searches is something like a more wide param search
+ and a narrow param search. So what you can do, given, okay, let's suppose, right, you have a very
+ shit PC and you have no idea if your strategy is working, you could widen these values a lot, do
+ like five to three and to two. And you could widen these values a lot, right? You could make this
+ like 80 because you have no idea where the exact right value is, right? Because what a grid search
+ will be doing for you is finding the ideal data values. Now, the ideal value of EMA 1 might as
+ well be 60, right? So maybe in Dream World, this value is 60. Now, if you're running these grid
+ searches between 4 and 40, I really hate these suggestions. It's giving me, come on, man. What the
+ hail cursor, come on, man. Okay, so 60. It's 60. Stop suggesting me things. So in your Dream World,
+ you are searching between 4 and 40. But because you haven't done a wide param search, you don't know.
+ So it's better to like, let's say, widen the range and make it like 4 to 80 and start searching in
+ steps of 30. And then when it approximates around 60, you can then narrow the param search. And all
+ it would take for you is to restart the notebook, run again, and you can just play around with the
+ parameters. So your first run would then be like 480, and then do it in like steps of two or four,
+ depending on how great amazing your PC is. Obviously, if you have a really very killer gaming PC,
+ because you used to be addicted to a Counter Strike 2, because come on, CSGO is way better,
+ but they killed the optimization, then you can do that differently. But if you want to do like a
+ wide search, and obviously, because the steps are bigger, the matrix computations, you know,
+ like it's going to run faster, you can make better approximations, and then you can do more precise,
+ narrow searches. It's a lot about expanding the exploration space of the parameters and making
+ the grid search combinations lesser, but wider, so that it computes faster. And then once you know,
+ because obviously, if you go in steps of two or four, it's going to be like all these, right? And
+ then maybe it at the end of the grid search, it finds an ideal value of like 68. But maybe the
+ perfect value is that say 67. So then you can, you know, make the make it a range, right? So let's
+ say it's 67. So then you would kind of, you know, square it, you would put in a value 50, and about
+ 65, and start looking in ranges of one. And then it can approximate or find the exact value better,
+ but you're saving time on running these grid searches. Because trust me, obviously,
+ having 36 values here, 40 here, and like 130 here, it's times times, right? So it's 36 times 50 times
+ 120, you know, that starts adding up really fast. And because it's a brute for your search,
+ meaning it's looking for every value, it can become computationally heavy, very fast. And anyone who's
+ done machine learning knows that then, you know, it's going to take a whole long, whole,
+ whole, whole ass long time for you to find anything worthwhile. And it might not even be good, right?
+ Like if your algorithm, if the rules you've set up for buying, selling, computing, the results are
+ very unoptimal, you might get results with very bad sharp ratios. And your grid search might be
+ useless. And it's pretty shitty if you, you know, we're looking for that stuff all night,
+ and then you wake up, you're like, fuck, yeah, I want to make some money. I want my BTC algo to be
+ like real good. And then you come and the sharp is like 5.5, you know, like, your sharps are not
+ good, man, no, this is not fun. Right. And I mean, this is probably not going to happen, because I
+ am basically giving you something that works very well, and is quite consistent. And I'm also
+ giving you a lot of indicators here that are pretty solid, by the way, like RSI, if you buy
+ above 50 below stock RSI to do these are very solid, I have tested them, like they're pretty
+ strong, right? Like MACD, pretty solid VWAP is something very widely used even at hedge funds,
+ shaft rencival, I have worked with this, it's also a very strong indicator. But still, when you start
+ switching assets, because you want to diversify that portfolio a little bit, because you don't want
+ to be building only algos for tech stocks, it might become a little tough, right? So that's
+ something to keep in mind. And once you start to reiterate

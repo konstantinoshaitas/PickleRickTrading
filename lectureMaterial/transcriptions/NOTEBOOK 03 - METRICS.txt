@@ -1,0 +1,187 @@
+ class in session once again welcome to part three of the notebook breakdown
+ this one will be covering possible metric possible metrics to use and
+ metrics used okay so warning again there's a little bit of redundancy here
+ in the code I also put in intentionally again for customizability idea yada yada
+ yada because I wanted to start actually experimenting with this I don't want you
+ to just run a triple EMA raw because it could be better right I want you to
+ start optimizing for things that are not just sharp ratio I want you to start
+ optimizing for Sordino, Calmar, Omega information ratios all these things
+ because it's going to be much much better for your own pursuits because you can
+ create a different portfolio that's more to your tastes right because all these
+ ratios have a very different connotation for what the grid search will
+ kind of look for when you start grid searching in my case because it's most
+ common and that's what I've done before but I've also used Sordino ratio I have
+ been optimizing for a sharp ratio Ergo the grid search will start looking for the
+ optimal sharp ratio combination of triple EMA or MACD or whatever you're
+ going to be building you're also going to be using a lot of these analytics to
+ kind of help understand the result and decide do I want to use this there's
+ obviously going to be a big data analysis component to the reiterative
+ process of building your algo and the accompanying ensemble method okay so I'm
+ going to cover some of these I'm not using all of them again this is to
+ exhort exhortation inspire action you might want to be optimizing for Omega
+ ratio or information ratio or tail ratio or deflated sharp ratio if you're going
+ to go down on lower time frame time frames time frames etc. right like I'm
+ giving you daily interval doesn't mean you have to go for daily interval you
+ might think four hour or eight hour or one hour is better because you want to
+ trade more frequently because you like being at the screen more or like you
+ know using a lot more indicators and that might require you different higher
+ lower time frames blah blah blah blah blah right okay so these first metrics
+ that they should be pretty obvious right like total return annualized return
+ total profit this should be pretty clear right like obviously total return is
+ the overall percentage gain or loss of the portfolio annualized return is the
+ geometric average of the return per year and the total profit is the absolute
+ monetary gain not in percentages but in values now sharp ratio is you know the
+ measure of excess return per unit of risk and the higher value will always
+ indicate but indicate better risk adjusted returns this is the main metric
+ that people will use it's the most consistent one if you're going to be
+ optimizing for other assets though some might have a different flavor to them
+ for example and the example I will be giving will be pertaining to your
+ sartinio ratio the sartinio ratio is similar to the sharp ratio but there's
+ a you know a little bit of a caveat to it it's very similar to the sharp ratio
+ where that it focuses on a you know it's it the formula is very similar where
+ it's portfolio return minus risk free rate divided by volatility except in
+ sartinio ratio it's only the downside deviation so it's not squared of full
+ you know like volatility total range the risk you know the main risk measure but
+ it's only like the bottom side of it right so to give you basically the
+ understanding logic of that if you're going to be modeling for let's say a
+ more volatile asset like Bitcoin and you really want a hammer that max drawdown
+ down you would optimize for a ratio that specifically in its formula by
+ definition focuses very hard on the downside deviation so that you can
+ penalize the harmful volatility because that's the thing right like sharp ratio
+ and I do think it's in a way more inferior but it generalizes better
+ because it's it's it's a square off but if you're going to be modeling for let's
+ say I mean not even BTC I think BTC is actually alright but let's say you're
+ doing Solana and the drawdowns are so extreme or you're optimizing like me for
+ triple NASDAQ you might actually want to optimize for a sartino ratio and see
+ what happens to the drawdown statistics once you like start rerunning the
+ notebooks you've narrowed down the search programs blah blah blah see what
+ happens when you start penalizing that downside deviation a lot that could be a
+ reason for you to optimize for a sartino ratio and see if that really
+ improves your metrics come compare like let's say an optimization run of sharp
+ compared to sartino and kind of observe if you might prefer running that one
+ more over the other one okay going to the calmer ratio the calmer ratio is a
+ measure of returns relative to maximum drawdown right so it kind of is an
+ indication of how well strategy is recovering from losses the formula is
+ annualized return divided by the max drawdown and a higher value would then
+ suggest a better performance relative to drawdowns so it's kind of similar to
+ the sartino ratio but again in the MO the philosophy of throwing it at the wall
+ and see what sticks once you start rerunning and you are just we don't
+ slap in those ratios on like a real real cowboy it might actually improve your
+ performance somewhat and that's why again exhortation try it that is actually
+ a genuine advice I'm giving you know you might want to try that if you like
+ how some of these sound then it might be something you want to model for again
+ right because then you can start making something that recovers from losses very
+ well if you find somewhere in your analysis that the drawdowns are very
+ common on that particular asset but you really want to hold that asset this
+ might be what you want to optimize for okay so the omega ratio compares the
+ probability weighted gains above a threshold to losses below it so formula
+ is summation of gains above threshold divided by a summation of losses above
+ threshold so this one again a high ratio gives you a better RR profile really
+ good for pushing consistency I'm not including it into the in the analysis
+ but I think that again is a super in is a super interesting ratio to go by I'm
+ gonna start speeding up a little bit here but these are all very interesting
+ ratios that you could optimize for information ratio measures the
+ consistency of outperformance relative to a benchmark so the formula is portfolio
+ returns minus benchmark return divided by tracking error and then the tracking
+ error is the standard deviation of difference between portfolio and
+ benchmark returns till ratio till ratio compares magnitude of extreme positive
+ returns right tail to extreme negative returns left tail in return distribution
+ formula is you know it's on the Z score returns of 0.95 and 95 sorry of 5 right
+ so it's really kind of like a nasim palep ratio here percentile square in
+ brackets returns 9 5 divide by percentile returns of 5 and a higher ratio of
+ this would indicate better upside potential relative to downside risk so
+ this one would be good if you're that would almost be the one that you want to
+ start computing for if you're the most risk avoidant person alive I guess and
+ you're holding an asset that really has dropped a lot there are some of those
+ out there like if you start modeling for maybe like penny stocks very dead assets
+ this might actually be a good one deflated sharp adjusts the sharp ratio to
+ account for potential overfitting of multiple testing biases in back test and
+ it reduces the sharp ratio based on the number of trials or parameter
+ combinations tested and it will provide a more conservative estimate it very much
+ is in the name where it's deflated this one I often would recommend for people
+ that are going into a day into our because if you start stacking like a
+ whole lot of trades and that's actually because I will I've posted the screenshots
+ give me a second I'm taking off my shirt I live in a tropical country it's very
+ hot here I get a lot of comments saying that the sample size of my back tests
+ seem small they're actually fine it's more about the average bars and trade
+ that are very high that create you know the sample size is more about like how
+ many days I've spent in a trade rather than the amount of trades because I'm
+ not exiting per day I'm exiting like every other month right the average
+ holding time of some of my algorithms are like 40 days but when you go into a day
+ into our you will start seeing a problem where there's so many trades that could
+ over inflate certain metrics like you might only have your best trades in the
+ middle of your testing period so to kind of combat that because the sharp ratio
+ might be up from only those certain amounts of trades in the middle like in
+ the middle of your sample size and then the other ones might be you know kind of
+ clouded over because there's just too much information going in and because
+ your sharp ratio is honestly you know it's a pretty simple formula and when you
+ go into a day and you start back testing that you often start seeing crazy
+ metrics like a sharp ratio of 13 now that is not correct at that point you have to
+ start adjusting your sharp ratio to be you know a normal number again when you
+ have my amount of trades it's not very necessary it's why I don't include it
+ but when you go into the hour intraday anything of the sort and your your
+ sharp ratio starts looking a little crazy you really want to start going for a
+ healthy deflated sharp ratio there's obviously also ways to compute deflated
+ sartino calmer omega but you're gonna have to look into those formulas because
+ it doesn't really hold much information in this case risk metrics now max
+ drawdown that is the largest peak through the largest peak decline in
+ portfolio value expressed as a percentage so it's peak value minus
+ true value divided by peak value the max drawdown is like the worst trading
+ streak you've ever had so max drawdown is basically maybe six losing trades
+ counted up together to give you the worst time ever of your back test basically
+ so if you've lost seven trades in a row six trades in a row and they're all like
+ four or five percent this is basically the compounded loss of all of them this
+ is your indication of does my strategy really pass the test or not I don't think
+ you should really optimize for this because you won't be accounting for
+ returns as much but it's a very you know important analytical tool volatility I
+ think in a way is self-explanatory it's the standard deviation of returns
+ usually annualized and it measures degree of variation in returns and it's the
+ squared factor it's the one that goes into sharp ratio here it's only the
+ downside of it of course but the volatility is basically the range in
+ which your results are trending and often will also be like used in things
+ like an average true range indicator they can be used to measure like channels
+ you can see where price is changing a lot in the in its profile it's in a way
+ also kind of like micro structure indications and I think that is a very
+ analytical tool as well because it can give you good it gives you a good
+ comparison to the benchmark underlying also index may measures the severity
+ and duration of drawdowns by calculating the square root of the mean
+ squared percentage drawdown over time and a lower ulcer index indicates less
+ severe or prolonged drawdowns so this one it's kind of indicates like the time
+ it's a good measure to take along with the max drawdown and this is also a
+ strong analytical tool the trade performance metrics win-rate total
+ trades average straight duration expectancy this one is the average
+ expected profit per trade so that's also a pretty good metric profit factor is I
+ believe profits divided by losses so if this ratio is like to it means you're
+ basically gaining double the amount per trade as you would like in a loss
+ right like let's say you're on average gaining two dollar per trade and losing
+ one then it's you know two divided by one meaning pretty solid and you always
+ want this one to be this one actually would not be bad if it's as high as
+ possible but you want it to be at least two sqn it's measuring the quality of a
+ trade system by combining the expectancy and consistency and that would give an
+ indication of a robust system essentially formula is expectancy divided by
+ standard deviation of trade returns times square root of total trades win-loss
+ analysis payoff ratio payoff ratio is the ratio of average winning trades to
+ average losing trade this one I actually tend to I've included it but not in
+ this exact formula way but that's also something maybe to keep in mind largest
+ win largest loss are very self-explanatory average win amount average
+ loss amount of course that's basically this winning streak losing streak so
+ that's the amount of trades in sequential order that you know are winning
+ I don't know what to say more about that okay recovery factor that is another
+ one that let's see the recovery factor it measures how well strategy recovers
+ from dog drawdowns and the formula is total profit divided by max drawdown
+ and the higher value would indicate a better recovery from losses interesting
+ to have good to input into an analytical tool gain to pain ratio this
+ one compares total profits to the sum of drawdowns over time reflects the
+ reward relative to pain formula is total profit divided by some of drawdowns
+ and higher value would indicate a more favorable experience serenity index this
+ one combines returns drawdown and duration to the measure of the quality of
+ a strategies performance and the formulas annualized return divided by ulcer
+ index so it's the one above that tells you like the time spent in drawdowns
+ more intelligent version of max drawdown can hold a little bit more
+ information and the higher serenity index would then indicate a strong return
+ relative to the risk and drawdown duration okay so like the indicators
+ before I'm throwing a lot of stuff at you to get some ideas I am not using all
+ of these metrics I want you to try and play around with these I personally do
+ believe something like paralysis by analysis exists and I do believe in
+ keeping things simple in a sense right if you think performance can increase with
+ more analytics go ahead but

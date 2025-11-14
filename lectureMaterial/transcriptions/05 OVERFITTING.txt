@@ -1,0 +1,46 @@
+ Welcome to the Overfitting and Generalization Explanation video.
+ Overfitting is generally the largest fear that you will have creating an algo.
+ That's why laser in the course there is a lot of talk about the sensitivity analysis
+ and how to properly treat training and test fit data because you can very much over train
+ by giving it too many examples making it not very well generalizing to new data values.
+ This is very dangerous because if it looks too good to be true,
+ so basically violating the no free launch theorem, then your strategy will not be very robust
+ and it will basically be contradicting my whole methodology of you need to have a very robust algo
+ so that you can comfortably sleep at night.
+ You want to optimize sleep a not sharp ratio.
+ Very nice point.
+ There are some visuals here.
+ A correct line would be something like this where it's not over fitting along the shapes.
+ You have to treat these circles like individual data entry points.
+ It should not be looking like something like that.
+ It has to have a well fitted curve around all data values much like this, not like that.
+ Why? Because if you start introducing new data values that are out of sample,
+ so let's say the training data is up till right about here in my algos,
+ if you start using these new values and they are too optimistic meaning your wind rate is too high,
+ meaning your sharps too high and it doesn't survive your sanity checks
+ that come in the notebook parts, then it will just die.
+ It means that you will have an algo that is basically useless, all your work will have been for nothing
+ and it will look too optimistic.
+ It will also look too perfect.
+ You can see the signals here on the chart, right?
+ And you can see that because they have flaws, meaning there are some mistakes in them,
+ meaning the sharp ratio isn't one million, million, billion,
+ and the profitable percentage, meaning the winning amount of trades aren't like 90,
+ it's actually realistic and better.
+ It means it's generalizing well, meaning like let's have an analogy, right?
+ Like you're a cook and you're learning how to cook with pans and pots and certain spoons, different utensils.
+ If you only know how to do this in one kitchen, how will you ever know how to do that in front of Gordon Ramsay?
+ You will not.
+ You have to be flexible in these things and that's the same way you have to treat your data.
+ That's why you have to have it memorized, general patterns, general lines, which is very much displayed here,
+ and not have it be only for you to use one certain pan, one certain thing.
+ A algorithm that's overfit will have perfect bias at these points, here, here, here.
+ It will look way too perfect.
+ Basically also message me when you're doing these things and there's more explanation of how to treat this,
+ but if it looks too good to be true, it will be because you will see that in the training period,
+ it will basically have perfect looking metrics, but it will never survive real out of sample testing,
+ which is why the emphasis on a very conservative split of data will really be a main point of the code in this course.
+ This will help you sleep better at night while still having metrics that will help you outperform the market very well.
+ Overfit really means that it's perfectly memorizing everything for one test,
+ but you won't really be knowing the base theory of, let's say, your math scores.
+ It's really just going to be a complete...

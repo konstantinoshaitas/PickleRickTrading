@@ -1,0 +1,135 @@
+ Welcome to the next sanity check. This one is with some charting. I think the
+ visual checks are also very important. They're very important to start
+ understanding. The first one would be the one of the rolling sharp. Obviously this
+ is full sample so these sharps here and the rolling sharp ratio by the way
+ obviously is a rolling forward changing and the average value obviously is
+ somewhere in the middle here right so you'll be seeing like an extremely high
+ rolling sharp somewhere here in you know the training period while here it's
+ going to be slightly lower because obviously it's unseen data. Obviously
+ still keeping in mind it has to survive and spend as little time under zero as
+ possible. In this one I can definitely conclude that it's going to be spending
+ some time under zero in its heaviest drawdown period right here and it's
+ going to be having its drawdowns kind of here on this equity curve and there
+ are some here like you cannot prevent obviously because it's markets. They are
+ going to be drawing down but you can kind of see that it's upkeeping staying
+ above at least 0.5. Well it's surviving even touching as high as two and you can
+ conclude here that it's surviving decently well even in these heavy periods. Obviously it's going
+ to be touching negative sometimes but the time spent under zero is extremely minimal even under
+ these heavy drawdowns that to be fair are quite heavy but hey it's crypto what can you do really.
+ I think this is a little bit of a okay check. I would not take this one as serious as like the
+ average value and one that comes after because it's much about the consistent trades being taken
+ making the casino your advantage right. Like I would not really dismiss something really based
+ on rolling sharp unless it's spending like let's say 60% of its time below zero but then also the
+ average value would obviously be super bad but maybe there is something alarming here sometimes.
+ Send me some screenshots when you make a notebook and we can definitely look at it together.
+ And hop in a call if needed. This one very important visual check regarding the minimal trades per
+ year. Here you really want all these buy and sell signals to be very well spaced out. You don't want
+ like let's say like these are chopping periods by the way so it's always going to be like this but
+ you want them to be spaced out right because we are doing trend following so what you want is
+ for it to catch these movements adequately at least you know and from this one I would say it's
+ not over or under trading too much unless it's a choppy period but if you would see that it starts
+ trading on in the trends it's going to be exiting much too early or too soon right. So
+ a little bit of indecision in these sideways movements here honestly like okay this is the
+ bear market like you can barely see it because of like the way of obviously the curve comes
+ percentually but if it was over trading like here here here that would be a big red flag because
+ then it would be making limitations for big swings and because we are swing trading we want to follow
+ trend you really want to keep in mind like is it catching and exiting before these swings adequately
+ right like we want to catch those big swings up like here here here and we don't want it to be
+ indecisive here because then it means that this grid search result would not really be ideal at all
+ you know and that would basically mean that maybe your max drawdown is very low because I've seen
+ that right if you have some kind of algo or result or decision that got created from the grid
+ search with a very low max drawdown but it's also being like timed in a way that it's exiting here
+ exiting exiting like let's say it's and in this case it happened it's that it could be exiting
+ prematurely meaning it's not catching those big moves and if it's not catching those big moves
+ you're not trend following properly right this is kind of like a soft analysis thing and it's
+ revealing you're going to have to develop that by going through these tests but if you're not
+ catching the big swings you might be kind of trading on a mean reversion but that's not the
+ point here right we want to follow trend so if you're not catching those big swings and your max
+ drawdown is super low you have an algo or something that is exiting prematurely which is limiting
+ your returns severely right you only wanted to exit here here here uh you know at the end of those
+ huge moves and if it is you are probably over trading if it's uh you know catching the whole swing
+ even down you're under trading right so that's the balance you want there and that's something
+ that's going to have to be in your mind as you are deciding on a minimum amount of trades or a
+ max amount of trades because you have to kind of you know you have to the grid search can do a lot
+ of work for you but you have to lead it in the right channels if you see that the max drawdown
+ and returns are both very low then you're over or under trading um being that if it's under trading
+ it's going to be doing so little trades that it's basically buying holding that means it's you're
+ taking the swing up but you're also taking the train right down so you're under trading so you
+ basically buying holding so what's the point close the notebook just buy the asset and walk away
+ from the computer but that's not what you want to be doing obviously I assume uh okay this little
+ equity curve ignore it honestly it's not really that great uh the one that I think is super important
+ is this one okay um here and I definitely want to um have this little uh table here too but I see
+ that this easing is a little bit off okay it doesn't matter we can scroll if we need um so total
+ trades plot at 30 so that's about uh how many years is this eight yeah so it's about four per year
+ win rate 46 decent enough for one of the ti's you know the technical indicators average win 51.5 oh
+ wait actually the metrics are here too oh you fucking retard um sorry also the smartest man in
+ the universe can make some mistakes you know I'm only right 98% of the time guys sorry um so win rate
+ 46.7 14 wins 16 losses very good uh average win 51 percent average loss 6.25 minus max win max loss
+ obviously the ratio of average win versus max loss very beautiful if this is so a big like this one
+ but what you want to be mining here is that you are consistently gaining a lot more right like
+ 20 is all about small wins small wins small wins small wins small loss small loss big win big
+ wins small loss small loss small loss small loss big win medium win small loss small loss as long
+ as your losses are always small you're winning at least 50 45 percent of the time and the average
+ meaning like the profit factor obviously is so high and the the the games per trade are so good
+ that you're consistently always gaining meaning you're going to be compounding successfully
+ meaning you're playing that casino effect your algo is good basically because this is only one ti
+ as soon as you introduce an ensemble you're going to be correcting making each other more robust
+ you're going to be enforcing a positive bias to have those casino trades basically I guess that's
+ a term I can start using for it then you're going to be doing very well in markets that's the uh
+ heuristic I've always gone by it's a very healthy heuristic uh I don't think uh you're allowing
+ yourself much space if you have let's say a win rate of like 30 percent and an absolutely high
+ average win rate because what if it the case now in this case obviously because we are testing 40
+ percent out of sample the robustness is going to be very high actually the values could obviously
+ be more optimal if the trading period was more recent and stuff and tested on more data but we're
+ going for robustness if at least the robustness is prioritized by having a sufficiently large out of
+ sample split like 40 35 percent it means that out of sample we are surviving and if then we start
+ on assembling and we are still so robust because we have a large trading split we can well do believe
+ and with enough evidence proven uh we can start live trading and we will be consistently gaining
+ money because we will have devised a well enough uh heuristic for ourselves that we will keep uh
+ stay consistent in live trading for years to come that's what I've gone by that's how I've traded
+ this life for three years and that's what you need to get in your mind obviously when you start
+ doing this I want you to communicate and send me screenshots I need to judge them and I need to see
+ what you're doing I can only yap as much um obviously the practice and logic has to come from
+ yourself eventually uh as a some time some day in the near future you have to become
+ a rick less morty and but you know I hope I can imprint this message somewhat I'd like to show a
+ final result of an ensemble this one it's uh is it the same matrix 10 okay it's not exactly the same
+ doesn't matter uh it's close somewhat not really this is uh something I optimized maybe not even
+ optimally but this is an ensemble right so this is a full sample test of two um
+ two ti's put together trading full sample meaning uh you know a full forward test both
+ together uh proving that combining indicators together is very strong and very solid at beating
+ the benchmark so total return is 7 000 annualized 72 sharp ratio absolutely industry great this of
+ course can be better if your iterative process is is you know thorough enough you start testing
+ enough and you combine as many indicators as you can volatility is a very very very strong
+ improvement over the volatility from the benchmark trades are very sufficient that's about five six
+ per year yeah win rate to be fair could be slightly higher but uh profit factor strong uh and that uh
+ actually I think these metrics I had them somewhere better but whatever this is a this is one of those
+ uh uh examples that um I can give right now uh I'm going to be doing more case studies where I would
+ want to improve this win rate to be honest but the sharp ratio at least is pretty strong uh
+ the win rate in this case I would be improving by uh you know uh changing around the grid searches
+ now uh honestly this I would not bring to production because the win rate here is too low
+ and this would then uh be am I on the right asset here though yes yes I am sorry um so this would
+ not be brought to production by me though the profit factor is still sufficiently strong but
+ this would cost me to go back into the reiterative process so it's actually pretty good to show kind
+ of a mistake I would ideally maybe want to improve the volatility but this is a case of where uh I
+ think the sharp ratio is very good certaina ratio is very good max drawdown strong enough okay like
+ this is crypto you have to be realistic maybe try to lower this to about 30 but um it's still good
+ enough where you know it's still 50 lower than uh the the original uh it's strong but this win rate
+ I would want it up so you have to go back maybe re-grid search um if possible you could even uh try to
+ because this is something you have to start getting creative about right um if the win rate isn't
+ strong enough look at the underlying TI's and decide okay I am not happy with this win rate
+ because I want it to be at least 47.5 for me to be comfortable with or at least 50 or 55
+ personally I like to shoot for about 50 I think that's pretty strong have a sharpie of 1.5 have it
+ perform out of sample adequately well of course um you can start looking at the underlying statistics
+ and then you can kind of uh you know be a doctor about it be surgical which one of the two is not
+ giving me enough win rate now then you can do actually do something very simple you could uh
+ remodule the notebook to optimize for uh more uh consistent trades so then the correction that will
+ happen in its final form will be that one of the TI's will pick more consistently winning trades
+ right because maybe the the entry and exit signals are now uh treating the data to have maybe a higher
+ profit factor to take you know more ballsy trades but have a lower casino factor right and we don't
+ want to have this low of a win rate going into the future right because we want it to generalize
+ well that's why we need strong heuristics we want a high average win rate so that there's room for
+ it to decay and yes this can happen though I would say because uh the the the larger your split is
+ and the the shorter your training duration the more robust it's going to be but you still want it to
+ have uh basically uh metrics that shoot for the stars land halfway below uh that are so so so strong
+ but yet robust that you have such a strong generalizing ability to basically go 10 down
+ but still do very well in the future that

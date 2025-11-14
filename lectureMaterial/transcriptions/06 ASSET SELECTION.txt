@@ -1,0 +1,139 @@
+ Okay, welcome to the how to pick training data training periods part of the
+ shebang I'm making. Okay, so this is actually a very nuanced topic because the
+ training data you pick is gonna make or break everything right if you think
+ about it and it's similar right like machine learning trains on basic
+ patterns right like you're if going right isn't good I have to go left if I go
+ left a lot I get attacked in a dark forest so I first go left then go right
+ and this becomes much more complicated as you go but obviously as pattern
+ training happens in any kind of algorithm with any kind of considerations
+ and numbers being generated it's extremely important that same as
+ overfitting and generalization it's very important what the entries is
+ because bad input becomes a bad output in practical terms and in this case too
+ of course it means that knowing what data you have is very important we
+ already discussed noise to signal ratio non-stationarity so there are some
+ assumptions you can make you also have to kind of know and think about what
+ kind of pattern you want to create right like do I always want to avoid certain
+ dead going left do I want to live by going right again or do I want to go
+ left left because for some reason there's like sunshine and rainbows but
+ then killer killer bees come right like do I want to enjoy myself before the
+ certain doom or do I want to keep leaving keep living but I'm in northern
+ Europe it's cool here blah I don't know something like this right so in this
+ case and it has to a few arguments and it's why it's the proposed one and the
+ desired ideal period for the current year in my honest opinion is somewhere
+ around the start of 2018 to ride about 2022 and to the middle of 2023 these
+ periods for multiple assets have some major corrections and have some
+ different ones but I'm using crypto right now as kind of like an example
+ because it's got a big one in this case at least for crypto there's some case
+ studies right you have a big bear market I don't know if people are as read into
+ crypto as I am watching but the big bear market of 2018 2019 happened right
+ here you can see that like there's basically not really I mean okay sure
+ there's something happening but there's in comparison to here and here there's
+ almost nothing happening right like this was called a bear market for crypto
+ there's a lot of like these sideways channels not much happening 200% in
+ this time of crypto is actually I don't know kind of mid if you start looking at
+ like let's say these gains and how quickly those appreciated going up it was
+ you know not nothing like crazy as like this boom mark like this is what they
+ call the bull market this is like a slight rise up but you know this is a
+ down period it had some different volume profiles some different volatility
+ profiles but most importantly it also had a big bull market in the period with
+ which gives it like basically two states of market to train on but also
+ something that's called a stress test where the market had a very strong
+ correction so if you stay in the trend of like what pattern you want to choose
+ and learn from there's multiple big corrections that happened that can help
+ pattern of emergence like an emerging pattern that we want which is to exit
+ trends as they end right so like here here and you have some different volume
+ profiles so you have another examples for autocorrelative patterns to happen
+ like in momentum effect but there's also those sudden shifts that can help
+ train the example of you know certain doom we need to exit our position and
+ that's kind of like something you need to go by thinking about these things in
+ this case there's multiple of these stress tests going down it's a healthy
+ example of data which gives it something good to go by if you start looking for
+ example and this has some other ones NASDAQ if you look here there's a
+ stress test three of them but for example if you start looking at pre 2018 data
+ like right here this is some fucking nail work here it's a lot up you know like
+ there are some like corrections here but there I mean this is a bit wild what
+ happened here but overall compared to these this period I would say it's much
+ more smooth right like this one it's very compressed there's a lot of big
+ shifts happening and you can train on some recent data so you're also like
+ kind of accounting for the non-stationarity of things recent data
+ with a lot of stress that's tests that happened that can give you that good
+ auto-correlative pattern that is the momentum effect but also gives the
+ models and things that you are grid searching a good idea of when to exit
+ while here it's mostly up the market corrections aren't as decisive like when
+ you start comparing them they really aren't as extreme start looking at this
+ it's very mostly a very smooth line up and it's mostly going to be and this is
+ also documented in most of the literature and news reports at the time
+ that it's mostly an upmarket so if you're going to be kind of creating a bias of
+ mostly markets going up you're training the wrong pattern which is why in this
+ case the option for this was like the choice for this personally by me at
+ least was not made then you have the out-of-sample data that also needs to
+ be a healthy period of course but that's why we're splitting in a 60 40 70 30 in
+ this case let's see now there's of course a lot of differences in data there
+ is also data that doesn't really show healthy trends at least data that looks
+ kind of like this does not have or has significant trends enough to train and
+ see the autocorrelative factors on that can help produce the output of numbers
+ that you want to have in a kind of algorithm when they start looking a
+ little bit more like the Dow Jones where it's a little bit more sideways now
+ here this is very choppy meaning like the NASDAQ actually pretty much gains like
+ wait this is wrong no look the NASDAQ gains very healthily up you know like
+ here it's up a little bit down up a little bit down up a little bit down up a
+ little bit down big down big up while here there's a lot of sideways action and
+ it actually makes the Dow Jones something very hard to model at least in
+ respects of of trend following right like this barely anything happening and
+ it's also a bizarrely different profile of volatility than most other parts of
+ the market so here you would almost need like a Markov model anything to decide
+ the regime and it makes modeling a lot more difficult at least for trend
+ following purposes because you can't really like here you could do a mean
+ reversion system with it maybe an RSI with certain buy points at 80 and 20 but
+ you know you need to do it a lot more and the returns aren't even there the
+ period of like that up period that I mentioned before I think it looks a lot
+ more healthy but still I think it's it's not as smooth and there's another one
+ that kind of has the same pattern that's gold this one is also at least for in my
+ opinion kind of like notoriously hard to model because it just look it just has
+ these crazy channels that last for for years this is yeah this is this here in
+ it's had its most historic rise of its most historic rise in like I think what
+ I read in news history like in the last like multiple decades at least like 50
+ years or something like if you look at the history of gold here the biggest
+ rise in like ages has been in 2024 like look at this this is like one big
+ channel here that lasts from 11 to 20 and then yet one little breakout and then
+ you have this one like that you can't model this if you had you would have
+ been modeling mean reversion and you would have been like just weirdly
+ trading this whole year that had its biggest gains you know like gold is
+ not something you do trend following on it's just not that asset it's just that
+ in the last year because there's been a lot of war and countries getting
+ fearful like you might as well have a fear and greed indicator for gold
+ basically because that's the basis of gold gold gets by it when people are
+ scared of wars that would have been the like the best way to trade this but
+ no we want healthy trending assets like Bitcoin NASDAQ other types of indices
+ and that's just not really going to work and that's really how you can do
+ simple soft analysis of charts to look at it there are definitely analysis is
+ analysis types you can do with like volatility profiles maybe even use an
+ ML cluster I'm actually thinking of creating those in the future but just
+ for show of a swift scanning like soft eye scanning this would do and naturally
+ the results you would see in in simps in sample and out of sample testing but
+ that's something we're covering later right because when you start test testing
+ in sample and out of sample you're looking for metrics like numbers one
+ to three to not suddenly become like eight nine ten right you want one two
+ three to become like one point two one two point two right you only want like
+ slight degradation from one day to set to the other instead of like heavy
+ changes happening because we are in trading by like a regime changing algo
+ we only follow one regime which is the regime that goes up that's the that's
+ the one right like we're trading by a up down methodology not like a slightly up
+ slightly down slightly a big up big up big up big big down like this needs
+ Markov modeling this needs more more math than I'm trying to teach right now
+ right it's more complicated so that's the bottom line of that basically and by
+ kind of looking at charts like this it's also going to help you select assets
+ better right because the support of like doing fundamental investing and
+ basically the system that I'm teaching you is going to be supportive of
+ essentially also fundamental picks like let's say you think Apple still has like
+ hello growth in itself you can model it and as long as you can kind of see that
+ there's healthy trends up there's not like excessive channels now okay there's a
+ bit of a channel here but these swings they are big enough that they can kind of
+ be models otherwise the model will tell you in like consistent win rates and
+ stuff that it's not but then you might have to use a different indicator you
+ might have to use you know other tools but as long as there are healthy trends
+ and you can swiftly see healthy trends and like I see a little bit of a channel
+ here but then it's big up big down big up by kind of training your eyes to have
+ this soft scan you can find suitable assets to then you know be hard about
+ right because I'm talking about a soft scan here I like not to be you know I
+ try to be quant

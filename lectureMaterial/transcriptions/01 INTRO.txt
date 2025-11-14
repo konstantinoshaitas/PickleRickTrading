@@ -1,0 +1,70 @@
+ Welcome to the first lecture. This one will be about swing trading, momentum
+ effect and the integration of technical indicators for this. Why these three
+ topics? Because they are the fundamental basis of what we are going to be doing.
+ The definition of swing trading is that of a medium-term trading methodology. A
+ long-term one would much more be one of long-term value investing and short-term
+ would be trading, day trading, scalping, these things. Now there are many many
+ reasons that I believe swing trading is more comfortable for beginners. One of
+ them and why I'm bringing it up here is because it's been my maiden project and
+ something I've been very fond of. It allows for very low stress while trading.
+ I can hold a position but also exit it. When you are in a long-term
+ position you are basically married with your trade and often the fallacy kind
+ of becomes like oh I'm 65, time to be rich blah blah blah, I have dollar. Now I
+ think that's a little silly. While something like day trading I think
+ it's a bit too much stress. What swing trading allows you to do is
+ still exit a few times a year or like 10, 30 something like this because
+ you're going to be holding from weeks to months these things. What method
+ will we be using that is the one of trend following. Trend following really
+ means you're following these waves. You're swing trading the trend waves
+ and you're kind of following them. Those are the things you're kind of using as
+ lexicon here to define let's say your mom asks, Ayo son what are you trading? I'm
+ trend following my swing trades mama. Don't worry I'm bringing us on the
+ Lambo. That's what you're doing right and why would it work? It would work
+ because of the momentum effect. The momentum effect is one of the reasons
+ why you could say there are lesser forms of efficient market hypothesis.
+ Efficient market hypothesis is that weird fairy tale thing that boomers like to
+ make up that the market is perfectly works perfectly and everything's
+ already priced in for some reason. Now this is really garbage honestly like
+ this doesn't work you know like come on please it's a little bit crazy.
+ Due to persistence of trend like you can see here people often like to swing
+ trade because holding things obviously for a long time as you can see here just
+ by you know kind of viewing the market in its structure appears to work out for
+ a lot of people. Of course then you want to kind of know like oh how do I time
+ that how do I exit that's what's work basically going to be teaching right.
+ And the methodological underpinning of that is the momentum effect. The
+ momentum effect provides the academic and empirical underpinning for this
+ momentum effect kind of describes the tendency of assets with recent
+ performance to continue outperforming. So what this kind of means is that
+ somewhere the recording was made that momentum implying something like an
+ indicator used for this like the absolute momentum indicator which is today's close
+ divided by you know yesterday's close or the other way around don't quote me on the
+ mat right there it doesn't matter. The differential close between today and
+ yesterday that's like the percentage of momentum that's recorded. There are also
+ of course other indicators like moving averages or average direction indicator
+ or an RSI but this doesn't matter. But anyway you can measure basically a
+ difference in price will conclude some kind of measure of momentum and because of
+ multiple reasons recent performance can kind of indicate continuing performance.
+ And this you know basically proves a persistence and a contradiction to weak forms of this
+ efficient market hypothesis and that demonstrates return auto correlation meaning you know
+ auto correlation meaning here you can see that these trends have continued. I hope I'm
+ explaining it somewhat well but that's the reason why swing trading and following trends works
+ in the way they do. There are some explanations for this like behavioral biases such as investors
+ underreacting and hurting in their behavior which would then delay like adjustment to new
+ information. You also have information diffusion where new data from the news or things like this
+ propagate unevenly you know like people from Asia or Oceania or you know some kind of island in
+ the middle of the ocean who knows might have this information later or earlier than you
+ or some other person who bought the course looked at the upcoming indicator building
+ like these moving averages a little later than you and bought later blah blah blah. There are also
+ of course market microstructure factors like liquidity constraints fund rebalancing blah
+ blah blah because a fund rebalancing would be something like the SPY the S&P they rebalance
+ every year things of these things right and liquidity constraints could occur because someone's
+ trading NYSE and someone's trading Nifty like Indian exchange and here they have 100 stock to
+ give you but here only 99 and 200 want to buy but you know Citadel hasn't you know market made
+ themselves into your wallet just yet and blah blah blah right so all these forces will then
+ collectively kind of create these paths you know in the price and that's phenomenal the helps and
+ basically creates a market environment that then allows swing and trend throttling strategies to
+ exist and have an exploitation there in the market and the momentum effect explains kind of why that
+ would be explainable for the reasons I just gave you so the behavioral biases of people where you
+ know often they will you know fomo in slowly but be fearful when the market crashes as you can see
+ with crypto or corona you know like markets crash a whole lot faster than they do usually and that's
+ a lot of the reasons why these things happen

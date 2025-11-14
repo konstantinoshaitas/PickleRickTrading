@@ -1,0 +1,61 @@
+ Welcome to the validation video. I've grabbed myself a coffee. Oh Jesus, it's so hot.
+ Jesus. Okay, so welcome to the validation part. Now this part might seem a little
+ strange, but you know I'm gonna have to explain that a tiny bit. Now we're going
+ to be looking at the out-of-sample part. This is extremely important and it has
+ a few nuances that I think are very important. Someone doing this for the
+ first time might be a little bit surprised, but it needs a real adjustment
+ and kind of like a reality check. It basically comes down to this. Here in
+ this script, obviously there's a replot of all the signals, there's a recreation
+ of the training and file data and it starts giving you the metrics in sample
+ and out-of-sample. And the degradation, ergo, the percentual change of the one to
+ the other. Total returns, annualized returns, sharp ratio, the...
+ What is probably the most damning here is that you can see that the metrics do
+ change, but that's what should happen. It's important to realize that obviously
+ whatever sharp ratio you optimize for in the training ratio will never be as
+ amazing as it will be in just pure practice. It's more about does it
+ survive, right? Because there it proves its ability to generalize. Because this is
+ pure unseen data. Your training data, sharp, sortino, I mean in this case, not
+ even necessarily the volatility, but drawdown, will always be slightly, you know,
+ worse, better, blah blah blah. In most cases it will be worse. In this case,
+ obviously it's only the triple EMA. The triple EMA is only one indicator. One
+ indicator, one weapon, one purpose, only good at one thing. We discussed before
+ that the EMA, because of its three different sensitivities to price
+ movement, because they are derivatives of, you know, their particular formula,
+ meaning like divide by an exponential at later data values. It's only good at
+ like catching whipsaws and like slug movements. Mac, these are going to more
+ be measuring, you know, like trend strengths and they only have one utility,
+ you know, like the same way you're not going to use a shovel to hit stone and
+ a pickaxe to hit dirt. They are not all good at the same and they will be better
+ or worse at different circumstances. That's why you want to ensemble them,
+ because they have to correct and confirm each other, because they have
+ different logic, right? It's the same way how in machine learning, a gradient
+ booster will not be fit for the same data set size or type data type, you know,
+ like if we're going to be doing credit risk scoring, it's not going to be the
+ same as, let's say, predicting heart failure, you know, it's going to have
+ different tools. The same way how an RSI might be better at mean reverting things,
+ right? We might even want to kind of measure both at the same time, but that's
+ where the reiterative process and the ensembles are very important. The only
+ conclusion to be drawn from this auto sample test is, does it survive? Is it
+ good enough for me to take it from one stage of production to the next one,
+ which would be the ensembling period, where you start combining these
+ different tools and then seeing what happens to, you know, the values then
+ when you start combining them, like are they correctly helping me measure these
+ whip sauce of movement in market versus the other components of price movement,
+ of course. So in this case, I would say it's doing very well. Despite the 30%
+ move in SHARP and in CORTINO, it's surviving. It's close to one and one is
+ the de facto standard that yes, even if not completely optimal, it is surviving
+ and generalizing well to new data, right? So undercorded, untrained, for unoptimized,
+ were not great, searched for data. The drawdown doesn't really change
+ significantly in my eyes. The volatility even improves slightly, but this is of
+ course also down to the fact that it's different data. The annualized return is
+ still pretty good, though maybe, you know, this out of sample data did not have as
+ many trades per year, don't differ much, win rate is keeping up, profit factor,
+ I mean, of course, this one does differ, but I would expect in this movement of
+ SHARP and profit factor being super high, I mean 14 is kind of a crazy value for it
+ to perform in such a way. Then we go down to the full sample evaluation and you can
+ see that the average outsharp is pretty good, honestly pretty good.
+ Volatility keeps up, total trades 30, trades per year, 39, win rate, pretty good.
+ Right? So from this I can conclude the 3MA, at least this grid search, survived,
+ right? Because that's key here. Key word is that it survived the out of sample.
+ And that's positive. It means that it is surviving one of the first sanity checks
+ and this one can get a pass from me to go to the next stage of

@@ -1,0 +1,86 @@
+ Welcome back! Now that we have learned how to kind of understand very simple
+ time horizon changes to data, kind of making values more smooth, helping that
+ auto-correlative aspect of momentum factor, right? Synergistic things
+ together, understanding what works on what time frame and you know what is
+ proper for swing trading, improving basically raw data input. We're now
+ going to go to the part or the theoretical part of how I have treated
+ the data being inputted into a formula. Now, technical indicators have many
+ different formulas. You have absolute momentum which is the previous days
+ close compared to today in percential difference dependent on n, you know that
+ can be 20, 30, 60 blah blah blah nobody cares. Moving averages and
+ crossover are more like a ratio. You can also have it as a comparison into
+ regular price, you know, you can have price crossover and ma as a by rule, you
+ can have double crossover averages in this course. I'm actually going to
+ explain using triples which is different because the dynamic of every
+ indicator kind of changes but how do you optimize that? How do you improve the
+ final values that are comprising your trading rules, the decision-making, how
+ does that comprise of the algorithm? The answer is a grid search. Now, the point I
+ was making at the end of the video was the one of the optimal value for the
+ best strat. Now, there are some caveats, right? You need good values but not too
+ good. You can do things like overfit your values but that's for a different
+ video. Right now I'm just going to explain how to get to a good value, right?
+ And how to get to a good value is very much about the amazing principle that's
+ called throw it at the wall and you know, Google EI see what sticks. Quite
+ literally, that's you throw it at the wall and you see what sticks. You'd be
+ surprised how scientifically valid that one is. It's actually a whole thing they
+ do in machine learning called the model selection phase. Where they
+ will quite literally take like certain decision trees, gradient boosters,
+ analogizers, logicizers, and see what happens and see what works. There's
+ really a lot of variables in science so you really just start testing a lot.
+ Kind of like a doctor, kind of starts pulling your ear to see if it hurts or
+ not. Whether it's down to that soft bone thing or like skin tissue or whatever.
+ You know? And that's why we will also quite literally be throwing these little
+ data values in a grid search. Now, you kind of already see a little grid here.
+ You know, you can see it here. I think in the video I did on YouTube I drew it in
+ a little bit less of a nice way. But you can make a grid, you know? And this grid
+ will then kind of hold every possible combination. This was a way more useful
+ way to do it. Okay, so you get it, right? And a grid search just for analogy. I'm
+ just going to be making a little grid now, right? But imagine this is our grid
+ here in the middle, right here. Every little box would have a certain
+ combination of values. So let's say we have the 200 MA, right? We have, no,
+ no, I mean, sorry, the double MA crossovers. So you would have the long,
+ the slow one, which would be the 200 in its default parameter, or the fast one,
+ which is usually the 50. I've already displayed to you in the last video that
+ when you change out those values, the outcome changes, right? But that would
+ suggest that you could also, you know, throw it at the wall and see what sticks.
+ So maybe in one of the grids, you would start testing 50 and 200. Maybe in this
+ one, you would do 50, 50, and 201, 202 with 50, 203 with 50. And all of them
+ would output their certain values, you would then go 51, and 250, and, you
+ know, 201, blah, blah, blah, blah, no, 51 and 201, blah, blah, blah. And that's
+ how you would start doing all of the combinations possible. All of them would
+ output their respective different values. And all of them would give their
+ different outcomes. That's the very basic premise of a grid search. It's
+ literally throwing all these different data values at the problem to try and
+ find the results, right? Because something like measuring or assessing, like kind
+ of based on feeling like a magician would like, no, no, I need, I need water
+ to spell because enemies fire. This doesn't really exist, right? There's too
+ many components often in the market, you know, like, I was just explaining to you
+ earlier, you know, like the macro economy, the changes here, it's non stationary.
+ People are buying more this year, less this year, we're in a bull run, we're in
+ a bear run. That's why quite literally, the philosophy of throw it at the wall
+ and see what sticks is so ever powerful. And that's what you do. So you can come
+ up to something that's grid searched like this strategy. And the treatment of
+ data becomes pretty good. Let me just clean this little thing up for a second.
+ Okay, wait, you may stay. Okay, they don't look that messy. But the MacD lines, I
+ don't like that. This, this, this, this. Just wanted to look a little clean.
+ Trayton chart. Yes. Okay, so this is very good. But problems start occurring when
+ I throw it at the wall for one asset. It's that it wouldn't work on other assets,
+ which is actually also, wait, no, let me get something with less correlation.
+ Like this, right? This is why you grid search and throw it at the wall for one
+ particular thing. Wait, it's still loading. Okay, right, you saw the back test
+ on the other one, it didn't work. This is why you throw it at the wall for this
+ scenario, because the values here are then treated well for, which is would then
+ also kind of reinforce the theory of throw it at the wall that's and see what
+ sticks because then you can actually see what's working in that scenario very
+ well if you catch my drift there. Right. So here you can see proper treatment of
+ the data. You can see entry. Actually, I think I might have removed a little bit
+ too much data here. Signal labels. Oh, wait, it was different ticker. I'm being
+ derpy right now. Okay, so here. Okay, so here you can see actual proper treatment
+ of that data, right? And here you would have seen not proper treatment of that,
+ right? You can see how unoptimized parameters are creating something that
+ doesn't. Sorry, I needed something that's uncorrelated. Here you can see
+ unproper treatment of the data like you saw on the lower timeframes in the last
+ video that create very, you know, bad signals. And that's why this is fact
+ confirmation of throw it at the wall, see what sticks and why it works. However,
+ the few catches to that are that it needs to not overfit. And why these are good
+ values and not perfect values.

@@ -1,0 +1,212 @@
+ Okay, welcome back.
+ Third video, no, fourth, fourth video.
+ Okay, in this one we start getting a little bit more practical.
+ We're actually going to be starting to execute stuff.
+ Over here you can see basically the first initialization of the big, big grid search that's going to happen.
+ Which is basically the core of everything.
+ Everything surrounding is your approach to it, what are you going to optimize for,
+ what will be your decision making leading up to it, what kind of asset is it,
+ like what kind of technical indicator are you going to be using,
+ what kind of metrics do you want to optimize for, what kind of things do you want to punish,
+ do you want to have a lower max drawdown, do you want to have maybe higher returns in these things,
+ you would start using a sharp ratio, do you want to minimize the duration of drawdowns,
+ then you would start using the accompanying metrics for that,
+ like a Martin ratio that's more accompanied with the ulcer index,
+ or you want to minimize the absolute value of a max drawdown,
+ so you start using the sortino ratio.
+ These things we can discuss more in a live chat on school, I would say.
+ The component of everything that's going to do the work for you, obviously, is the giant grid search that you're going to do.
+ We've already discussed wide and narrow search params,
+ and the thing I want to highlight in this giant code block,
+ I kind of invite people to pop open a chat window with Uncursor or anything,
+ and try to understand this line by line.
+ I would rather save time having to explain this, because I don't think it really adds much to theory.
+ It has some key things like a minimum amount of trades per year, that's something I would like to highlight.
+ What you will see is that there's a few tweaks that you have, right?
+ You have the thing that you're optimizing for, like a sharp ratio, for example, or a sortino ratio,
+ that's going to decide a lot what kind of combination will be deemed optimal.
+ But there are other tweaks, depending on what time frame you're building for, or what kind of asset it is, and it comes in later.
+ In this case, I have decided that there has to be a minimum of two trades per year,
+ because there's a component of outcome, there's a no, no, there's a case or scenario,
+ there's a scenario outcome that can happen where a grid search will give you a combination of metrics,
+ in this case the 3MA, that can over or under trade.
+ Now, that's going to cost a lot of commission, it's going to affect performance,
+ and this is something you may have to tweak.
+ There's a visual later down the line, if we go all the way down here, right?
+ Here, right? Here you can see at these little triangles how trades are spaced apart, right?
+ And if there's too many of them, and the time spent in trade is too much,
+ it means you're not actually swing trading, right?
+ So there is a fine line between too many trades, too little trades,
+ this is something you're going to have to kind of give a nudge to, you're going to have to fine tune these things,
+ and it's going to be dependent on assets, of course, right?
+ Because they have different profiles, they're going to have different volatility,
+ and you might even have to set a cap, they might start over trading, they might start under trading,
+ if you have, let's say, a trading window of 10 years, and there's only 10 trades,
+ it means it's likely overfit, not really realistic, and this is something you're going to have to kind of fine tune.
+ In general, you kind of want three to maximum eight trades per, depends also on average time spent in,
+ but for swing trading, you kind of want to assess this, right?
+ Like, am I holding trades for at least like four to five weeks, maximum three months?
+ Because if it's too long, it's going to start looking like, you know, basically buying and holding,
+ and it's going to mirror that, and it's going to lower the performance.
+ Obviously, we still want to be timing the market, so keep that in mind, and keep it in mind when you analyze.
+ Furthermore, there's just a lot of calculations here for, you know, deciding, defining trading rules.
+ When you start modifying these notebooks for like MapD, these are things you want to heat and edit,
+ because obviously these EMA123 want to be turned into entries and exits for different indicators
+ once you start playing around with this, start remodeling the notebook,
+ and you start adapting it to have different strategies, etc.
+ Because then you need to start adjusting these notebooks, so it's important that you study these a bit,
+ maybe improve them even. I mean, I'm not a software engineer, you know?
+ I can code, but I will admit, probably there are some flaws in this notebook.
+ I'm not an engineer, I'm just a guy putting models in place, you know?
+ But I digress. Obviously, you want to account for fees, slippage, these things,
+ so that the backtests you're doing and the grid search that's going to be doing basically,
+ I mean, whatever dimensions the parameter should give, it's going to be doing a lot of backtests,
+ so obviously you want it to be realistic, definition of the interval, of course,
+ portfolio metrics that you're going to be measuring, yada, yada, yada,
+ and then the print for the initiation comes.
+ This one, in this case, has 30,000 parameter combinations.
+ Obviously, when you start adjusting the steps, like I was showing in the video before,
+ it will have, you know, what was it, 36 times 50 times 130, something like this.
+ I don't know, I don't recall correctly specifically, but more parameter combinations,
+ more matrix operations is going to be computationally heavy.
+ Now, because I increased those steps, it was only 12 minutes, blah, blah, blah,
+ but this can go as high as a million, and that's when you get into overnight runs,
+ and that's why I really recommend widening and then narrowing down once you've got
+ the near vicinity of the optimal metric for that indicator, for that asset, yada, yada, yada,
+ I want you to start experimenting with these things yourself.
+ Now, I'm going to show you the print here a little bit, try to show you, obviously,
+ there's a progress print with a percentage, so you can kind of keep track.
+ This field thing here is obviously to show you whether it's passing the minimum of trades, right?
+ You can also, of course, code in things like, I only want trades with a certain win rate,
+ I only want trades above a certain sharp ratio, you can narrow it down, of course,
+ so that it's not even being considered.
+ It's fine, though, you know, you're going to obviously just select the one with the highest sharp ratio
+ at the end of the day, but do keep these things in mind so that you can stay creative about
+ how you can start constructing your own algo once you start remodeling with the notebook.
+ Now, combinations tested, successfully completed, meaning success rate, blah, blah, blah,
+ success rate, blah, blah, blah, half of these were under the desired minimum of above two trades per year.
+ Now, here is just another little print to kind of analyze the orchestration of it all,
+ and you can kind of compare metrics that have been concluded from the grid search
+ and can help you analyze.
+ Now, the best total return apparently was 1160, average was 635, best annualized was 72,
+ best sharp was 1.3.
+ Now, this is going to give you material to kind of compare notebook to notebook side by side.
+ This is something I'm going to be doing more on school as I go, because I'm going to be constructing a portfolio
+ kind of alongside as we go, right?
+ Like, as time eclipses and as time goes on, I'm going to be modeling for different assets
+ so that there's going to be case studies to go by, essentially,
+ that you can kind of mirror or shadow your own work with, right?
+ So that you can kind of start understanding how I approach these things
+ so that you can also enhance your own thinking in this way.
+ But what's nice is if you have these return metrics, you can start also comparing to other assets, right?
+ Like, here is the BTC MACD, here I'm doing triple NASDAQ,
+ here I'm doing a triple Dow Jones, here I have gold, blah, blah, blah, you know,
+ you can just compare anything of course.
+ But then you can compare kind of side to side, right?
+ Because at some point you're going to be rating indicators to indicators, but also assets to assets.
+ There's obviously going to be maybe a case where you are kind of optimizing for similar assets.
+ I have, you know, modeled for triple NASDAQ because triple NASDAQ is, it trends well.
+ I've explained before how I believe in intelligent timing of risk
+ and exposing myself to low volatility periods, but then increasing my risk
+ because then presumably there is a predictable trend that I can safely leverage myself with
+ or during my exposure to it.
+ So, but because, and that's kind of my point, the triple NASDAQ and Bitcoin, tech and crypto,
+ they kind of have a correlation.
+ So, once you start having these like super high beta assets, which they both arguably are,
+ honestly, especially if you're leveraging, you kind of want to start comparing them, right?
+ Because you want to be obviously making a portfolio of strategies with low correlation.
+ That's besides the fact, but you also want to be exposing yourself to the best asset possible.
+ There's also the TECL, like Techl, that is like, I believe, even more concentrated on tech stocks
+ than the NASDAQ is.
+ But once you're comparing like two, let's say, tech heavy indices, you really want to start comparing
+ like how is the average RID search doing?
+ How is the shop, how are the sharps looking?
+ Because if you're doing like, let's say, two financial indices and you're, because you want to model them
+ or you're doing gold to silver, like things that are very similar in nature,
+ you obviously don't want to be holding both of them, but one has an obvious better sharpie.
+ You know, there's an obvious comparison to be made there, but you can also compare how the progress of these is through time
+ as you're kind of tuning the notebooks that you're using to develop the algorithm for that particular asset.
+ Now, I will continue a bit here and then you get to the final result.
+ Obviously, here is the print, recreate best strategy for final analysis.
+ And here you can see basically a little profile that I made to compare to benchmark.
+ Obviously, the first test is to beat benchmark.
+ In this case, I'm not going to be comparing to S&P.
+ People will often, very often compare to the S&P in most cases, but I think it's a little bit silly.
+ Like it's in my opinion, at least, and I'm going to sound alien to a lot of people,
+ but I think it's doable to beat the S&P, to be honest.
+ So obviously I coded in that my benchmark is the underlying why finance sticker that I downloaded.
+ So here, the best results from the back test optimized for sharp, because that's what I'm doing in this basic notebook, is this.
+ So it was the EMA combination of 10, 64, 1, 2, 6.
+ Obviously, if I narrowed the search options more, meaning here,
+ not here, here, if I had narrowed these more to be 1, 1, 1 in steps of 1, 1, 1,
+ then the results would have been different.
+ But given I was reiterating and still working on this notebook, which I mean, right now I'm just showing you,
+ that's why I, you know, widened them a little bit so it's easier for me to run stuff and showcase just in pure example,
+ not like absolute performance coming later, of course, once school develops and I make more videos.
+ But the results would have obviously been different if I had made it more narrow.
+ So it's not to say that this is like the best triple EMA for Bitcoin ever, you know, but let's discuss the results here.
+ So total return is 1160, annualized return is 7, 2.
+ Now I do believe that is also the best here and the best here.
+ So it's also way above the average.
+ So it means that it was in fact a very good backtest.
+ The sharp ratio is pretty good.
+ I think personally that you should at least come at 1.45, you know, like get as close to 1.5 as possible because that's the absolute industry benchmark.
+ Obviously this may improve as you make it, as you make the ensemble.
+ It could also get worse because the ensemble will make it more robust, but if it got slightly gets slightly worse,
+ it may be that your combination of two TIs in ensemble has decreased bias for the worst.
+ It has created decreased variance for the worse and maybe the sharp we got a little worse,
+ but because you're combining them and because like I explained they're corrective of each other, it might be that they are not the ideal combination.
+ That's why on top, obviously I've attached more indicators so that you can iterate more.
+ Obviously you can also start optimizing for different values, optimize differently and see if that improves.
+ But that's why it's so important to keep working on these, right?
+ Like once you've got your final portfolio set up of algos to run, then you can keep improving them.
+ And that's also the beauty of swing trading, of course, is that you put them in place, you maybe use an AWS,
+ maybe you will host them on TradingView to send you SMS emails and trade by hand.
+ It's swing trading, it's possible, I do this actually.
+ It's not that big of a problem because the timing is so infrequent that you're going to be holding them for months.
+ Anyway, so it's fine to do a little bit manual there, but as you are trading actively, you can also just keep improving the strategies.
+ So you're never done working, news flash, and you can just keep adding, making, reassembling the strategies and you can keep comparing them.
+ So max drawdown improved over, now see, that's a huge improvement, of course.
+ If you look at the volatility rating 74 to 47, now that, well, it didn't have but close to it.
+ And you can see that in all reality, buying or buying Bitcoin actually really blows.
+ Like if you look at the annualized return, because of like the huge moves it makes, right, like the moves on Bitcoin are so big that it's just not that good anymore to buy and hold Bitcoin.
+ But people will still, do you know that guy on Instagram that is like, he's, what the fuck is he doing?
+ He lives in his car, goes to an expensive gym and is putting everything into crypto.
+ Now, if you look at his metric, do you think he's being a intelligent person?
+ I digress. He might be a little bit crazy, but I mean, he's getting good numbers and followers, I guess.
+ But I don't know at what cost.
+ Obviously, the trade count is a little bit low, but once you ensemble the two, the trade count gets higher, don't worry.
+ Win rate is pretty good.
+ Obviously, what you want is a win rate at least like above 50.
+ 41-42 can be arguably okay, but you would want your profit factor, which is this one, to be adequately strong,
+ so that maybe 42%, which is not the most ideal amount of wins, are at least still giving you adequate returns, right?
+ So that you're not gambling, you're kind of like the casino where eventually it's been, you know, gamed in that the house always wins.
+ This is your part of being a casino where you basically are predicting always to have a consistently profitable trade, right?
+ Because that's what's going to happen.
+ Any win rate above 60, by the way, is crazy.
+ Okay, 60 is possible, but 65-70, we're starting to enter very unrealistic territory.
+ But this is basically the component of casino where you want to be gaming it, you know?
+ You want to always be taking a 50% chance of, you know, in this case, 14-exing every possible loss that you could have had.
+ And in this way, you're going to be communitively gaining more money than you are losing, which then creates that compounding effect for you,
+ which is why algo trading in this case really works.
+ Now, max drawdown, 30% can sound a little scary, but like we discussed, right?
+ Max drawdown is multiple losing trades.
+ And as I can show you in here, that only happens like here.
+ So that's only one point in time, and it only lasts like long, slightly here, right?
+ And like I've also discussed in a different video, you want uncorrelated assets.
+ So drawdowns are going to happen, by the way. You can't model around them, but because you want uncorrelated returns,
+ you want your asset and the other asset to not be drawn down at the same time, but at the same time in, let's say, hectic market scenarios,
+ anything will be drawn down anyway because correlation goes up.
+ We are still in the market, you will never prevent them.
+ The only thing you can do is to consistently gain more than you are losing, like I was trying to tell you with the casino example, right?
+ But in any case, it's still a whole lot better than the max drawdown of 80.
+ This actually justifies holding Bitcoin in much larger percentages than you ever would with a buy and hold portfolio,
+ which is why I think this is very strong, right?
+ And once you start ensembling them and you have the right combination, you'll see that the drawdown does go down.
+ So don't worry too much about those metrics right now. You really want to focus on sharp ratio.
+ Is it close to 1.5? Is the sortino getting close to 2.5 to 2?
+ Because then you know the downside is well-hedged. Are there returns? Something that you couldn't live with?
+ Now, I assume most people can live with 72. Volatility, did it significantly improve?
+ You just want to see, like, am I significantly reducing the market beta?
+ Am I getting good excess of max drawdown? How big is the difference in sharpie?
+ And then you start improving those significantly. And then when you compose that, put them in a portfolio.

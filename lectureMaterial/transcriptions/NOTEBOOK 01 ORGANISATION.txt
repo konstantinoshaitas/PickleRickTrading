@@ -1,0 +1,169 @@
+ class is in session welcome you've come to the I don't know the core of it I
+ guess right anything before this has purely been like me basically going M&M
+ rep got on like basically a lot of concepts that I have you know internalized
+ over the years yada yada yada you know obviously a lot of that is natural to me
+ I'm teaching for a first time ever I do probably realize that I'm going over
+ topics very fast but it's an ongoing thing you know you're here now you you
+ know paid to see the material if anything is vague send me a message if
+ needed low hop on a discord call I'm all down for that because that's you know
+ the offer you know I'm trying to teach I'm new to it so you know obviously a
+ veteran university professor might be a bit more broad at the same time I think
+ information nowadays can be given in a lot shorter more compressed
+ fashion that makes it easier to understand in a sense and I do believe
+ personally speaking at least that a lot of things can also be covered way too
+ much when a lot of these things can be common sense that I'm gonna stop stop
+ yapping blah blah blah prologue done okay so this is the notebook this is the
+ notebook I'm going to give you can see on the top here there's a bit more stuff
+ going on right there's a little bit more at the back of it you can see here for
+ example BTC ensemble that's what I was talking about before you know where you
+ combine technical indicators the way I've set at least set this up for the
+ time being is a very simple version because it does need some reiteration
+ right when you start building and you start building algorithm you start
+ building any kind of trading strategy it's never going to be perfect from the
+ start I've talked about the idea of like super scientific of course of throwing
+ shit at the wall see what sticks that's really a lot of stuff you're going to be
+ doing you're gonna make an assumption and then you need to prove it it's
+ actually you know kind of documented in science too because you're never gonna
+ have this perfect intuition so you need a notebook that you can kind of
+ reiterate over redo stuff as you go so I'm gonna go through the notebook I'm
+ gonna start explaining why things are the way they are the way I've set it up
+ this notebook I will be attaching so people can look at it blah blah blah
+ maybe use it and I'm going to be explaining how you could in your own
+ efforts and me helping as much as I can realistically and how you then can
+ create your own unique version of algorithm to yeah basically make your
+ own strategies and compose a portfolio so for beginners sake obviously the
+ language is Python Python is the best language ever because you can import a
+ ton of libraries it's all open source there's infinite use cases like the way
+ you have to look at programming it Python is the perfect language for many
+ cases because libraries allow you to import basically any tool in the world
+ an example would be vector VB which is like a backtesting module that can
+ automate thousands of lines for you to reliably test strategies I've enjoyed
+ using it so far you can also make your own but if you're not like you know
+ sufficiently a depth at code this can give a lot of confusions and only cost
+ you to make mistakes if it ain't broke don't fix it is my motto MO I tried
+ building my own backtesting module often sometimes they produced results I
+ like but for something that I have to kind of trust in the case that I want it
+ to be right now I tried cost referencing with TradingView cross it's not like
+ TradingView has the perfect metrics but I tried to mirror at least the results
+ but they were so off that I decided to go for factor BT and it's been totally fine
+ for at least application in the sense that I was wishing for it to be in this
+ course material okay so PIP install in whatever VS code version you've got
+ that respectively there it might be PIP 3 install no exclamation mark install
+ blah blah blah these are the libraries used why finance TA live for technical
+ indicators non-pi for basic mathematical operations pandas for data frames etc
+ data storage factor BT for backtesting and ski B for statistical purposes math
+ bloodlib for chart charting yeah for charting yeah visualizations okay so
+ here why finance is used I'm using why finance for this because it's freely
+ accessible and you don't need like an API key you can get a rate locked if you
+ download too much there are better APIs if you have an API key you can use like
+ alavavantage you can use data bento they give you some free credits there's many
+ different ways to do it but for all purposes for daily interval if you go
+ below you want to construct something more advanced you're gonna need other
+ data brokers like that that bento or alavantage but for the at least the use
+ case of this course why finance is honestly fine definition of ticker of
+ course in this notebook we're working with Bitcoin start date is 2018 0101
+ as I've you know described in the the part where I'm describing basically how
+ to have that soft way of looking at data but looking for those accompanying
+ stress tests to you know find a training period that is suitable for the
+ algorithm you would want to create ideally here of course is just some code
+ to you know download blah blah blah print it out here you can see the print
+ of the data I've made the case for vibe coding blah blah blah what is very
+ important is that you always have displays prints you know that's what
+ this is to really check the data frame the data set blah blah blah whatever
+ kind of results you're trying to create so that you can actually curate what's
+ happening extremely important I have seen it in the discord that people will
+ if I can maybe display that they'll have no no no not like this with they'll have
+ giant code blocks kind of look like this and then they go control C control V
+ and they try to edit whole codes like this without breaking it up if you look
+ at this notebook everything is broken up carefully with print so you can
+ actually know what's going on if you don't know what's going on under the
+ hood and you're not breaking it up in parts the orchestration of your whole
+ notebook is simply going to suck it's going to be bad if you're going to
+ vibe code don't turn it into a giant black box where you don't know what's
+ going on in between obviously I'm not using VS code here I am using cursor
+ because it makes a lot of work a lot faster and in a way better because I can
+ use a giant fucking LLM that's been trained on petabytes of data though it
+ requires me to break things up even more so I can actually cure it code now
+ this is some simple code but let's say you stop using vector BT to make your
+ own backfester you really have to go check line by line much you would like
+ code normally but to make sure that things a you actually understand what's
+ going on so that you can actually explain it to people so it's like
+ demonstrable and very reproducible in other cases so you don't like lose
+ money but you you know you can check you know what you're actually getting is
+ what you're looking for so you really want to take care of that organizing a
+ notebook of course also really happens like this you want to carefully
+ orchestrate breakdown for you know function sick but also to read it back
+ yourself you know it's going to be painful if you're working with someone
+ they're gonna be looking at it but also just for any other use case you really
+ want to do that so please avoid that I've seen people do it don't do it I saw
+ people in master degrees do it don't do it please for the love of God okay so
+ coming to the second note block here this one it's with TA lip it's defining
+ the columns it's here calculating moving averages exponential moving averages
+ MACD RSI stochastic RSI VWAP it's all the manual calculations for them
+ shaft trend cycle and creating the data frame accompanying why okay so basic
+ basic warning I have added a lot more indicators in this notebook here than
+ I'm actually using it's the way I build is I start small and then I expand right
+ like I could be grid searching a lot more stuff in this notebook but it can't
+ becomes computationally heavy I'm working on a MacBook a grid search in this
+ case what I'm doing is very it's brute-forced right so it's doing all
+ matrix calculations all at the same time for every combination possible there's
+ different ways to grid search you have randomized grid search and grid searches
+ you have Bayesian grid searches you can even start doing genetic programming
+ it's stuff I'm going to be looking looking into later but it's not important
+ right now that could either be like a Bayesian is computationally better but
+ if you have like not as strong hardware you kind of have to start understanding
+ also that your computation has limits but also from you know the kind of
+ software engineering perspective you can't just you know come like complete
+ every matrix calculation if you simply make it too big it comes up a few more
+ times but also for the construction of code sense if you start building super
+ broad super big from the beginning in your in your own notebook and you're new
+ to constructing things and it becomes over engineered from the beginning your
+ and you're not orchestrating it correctly breaking up the code properly it's
+ going to be a mess but also for customizability sake for this notebook
+ because I'm going to be giving what this one you also see this one BTC MacD
+ this one it's obviously using different values 3ma it's a triple exponential
+ moving average and this one MacD obviously is another indicator it's
+ already provided here I've also put in other ones RSI stock RSI stochastic
+ meaning VWAP what what else is here a shaft trend cycle I also included
+ yeah yeah STC right so the purpose of this course and this notebook is not for
+ me to just give you all the tools that's a little bit silly I'm trying to teach
+ you something through practice and iteration of yourself on your own
+ initiative and talking to me to kind of like find your own way of learning it to
+ construct an algorithm right I'm giving a triple exponential moving average
+ notebook away for free to look at and kind of play around with and maybe
+ reorganize I am providing other indicators in the notebook but the
+ intention of it is for you to start playing around with right because like
+ we've discussed the treatment of data differs a lot depending on how you
+ treat it the triple exponential moving average obviously is three very simple
+ averages with an exponential at the end with for the later data values when you
+ start looking at a MacD the math behind it already come becomes very different
+ with an RSI it's like average gain divided by average loss a shaft trend cycle
+ actually already becomes like very mathematical and every
+ formula therein is very different so of course the results when you start grid
+ searching and backtesting become very different so what the amalgamation of
+ what I'm trying to tell you becomes is that you start throwing a lot of these things at the wall
+ no like in application I think it's all very simple but it requires you to play around with
+ a lot of these factors right the ideal and scenario is that you start creating notebooks for yourself
+ with triple exponential moving average with macd with RSI with VWAP with shaft trend cycle
+ and you start seeing which ones of them work the best in the ensemble the algorithms that I've
+ made and shown before like the Tima the T-MacD the ones that you saw in the previous video that I
+ was showing on TradingView that's an ensemble of the triple moving average that you see in this
+ notebook and the MacD because it's T E M A C D wow that's a mouthful right those two I tested
+ but what are you gonna do there's like 90 100 you can even make your own technical indicators
+ right and their individual treatments of data are very very very very different and they're all
+ going to give you different scores different ensembles and that's also like a nice way for you to make
+ your own algorithm and trading style or I mean it's not your trading style right it's your algo
+ method something right and you're going to find different ways of applying them that's why this
+ is a perfect made-in project it's algorithmic trading you can do it over different timeframes
+ and you can start seeing differences I've talked before about like mean reversions for maybe like
+ gold right I've got it somewhere here it's right I'm running a grid search here for gold
+ just to give like some case studies and show people kind of the differences of the certain
+ indicators right because trend indicators like I've said don't work as well as other ones
+ for certain assets I have specifically been looking at well trending assets like you know a lot of
+ tech stocks are and a lot of cryptos are but if you want to model for gold because you want to hold
+ a less volatile asset you're going to have to use different indicators and that's why I've included
+ them here in this case because why is this happening because you need to start playing around with a
+ lot of these so that's why they're here that's the intention so you can so you know they're in
+ the notebook they're ready to use you can remodel it you can start you know vibe coding over here I
+ do really recommend cursor blah blah blah but you can edit around the notebook to have a different
+ indicator but in this case there's the triple exponential moving average

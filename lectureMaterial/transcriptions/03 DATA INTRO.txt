@@ -1,0 +1,151 @@
+ okay so the last one I was telling you basically what works and now I'm gonna
+ tell you what nots work because right now you are thinking right?
+ Lixie you are looking like genius you show us line go up everything is perfect
+ mom I will buy Lambo very soon I'm gonna tell you what the problem is okay so
+ there's a lot of differing data right you've got a lot of different factors
+ influencing markets you've got non-stationarity and I kind of start
+ smiling when I say that but you've got to realize like non-stationarity meaning
+ non-stationary someone sitting in a chair like I am right now stationary E I
+ minus it stationary person someone running non-stationary meaning changing
+ all the time right so what does that mean price in over the years and I'm
+ gonna go to the monthly for this always changes if you look and it's gonna be
+ like history of the markets right do you think that for example and if I
+ plot a line yeah because this is a hundred and six right like follow my
+ personal right here do you think that this when the market recovered 106 is
+ the same in 2016 as it was in 2000 like right here quick trick question now
+ inflation what happened after you know like 9-11 Iraq war you know these
+ happened all around like here here I don't know probably all of other bad
+ stuff 2008 of course happened right what do you think happens around all this
+ time you know like basically this price won't even covered because after here
+ they changed macroeconomic economic policies right we've had a little run
+ up here and basically the summation of that is that it's non-stationary and
+ the factors on this are war monetary policy inflation because 2% is the
+ average per year anyway it always changes now it can be even worse than that
+ because next to non-stationarity non-stat I'll just shorten it you also
+ have noise in bars meaning noise to signal what would that mean you have a
+ noise to signal ratio in this little bar right you have let's see a lot of
+ compressed information this little month whoa this okay that's nice that's a
+ nice trading few feature in this little bar there's a lot of information
+ because this is a one-month bar meaning it opened and closed on the first and
+ last values entered right if I think about how much data is inputted into
+ that one data value like let's say you have a little Excel sheet right and you
+ have your little rows right and here you have entry for month one of year month
+ two of here month three it means that in every month there are 30 days and in all
+ these days there are you know 24 hours times 60 hours but then start looking at
+ let's say all these little bar all these little time frames right you have one
+ second you have one minute right like every one day has 24 hours has 60
+ minutes you know do you start do you start to see like how these data values
+ in those Excel sheets can be treated right like I can have a one month data set
+ of 30 days or I can have a one month data set of let's say you know 60 times no
+ like 30 times a day but have it 20 24 hours respectively right which would
+ give me 30 times 24 rows right so either I have 30 rows or have 30 times 24 rows
+ or heck it can be even worse right like you can keep can keep multiplying now
+ why am I saying that because I want you to kind of envision that data set if I
+ start moving down to let's say the Juan minute data frame okay I move down I'm
+ moving down right you see minutes here you have days okay so I'm gonna mark down
+ this day the 6th to the 7th of October because that's that's what I'm filming
+ this stuff you know I'm in the past and stuff you're not you're watching from
+ the future so this is one day now I want you to envision right this is one day in
+ that data set so I'm gonna make this a little bit bigger right and let's don't
+ take this all too literal right but this is when the day opened right this is
+ one that they closed so either I have 30 days in that data set that I just told
+ you about and it would have O C H L and you know some some volume indicators
+ that I've removed haha right so that's that's either one entry or I have 30
+ times well this is a this is the minute bar it doesn't matter whatever right so
+ you have here because I'm in the EU this is opening hour right here this is
+ usually the most volatile period and then here you can already kind of see
+ that because it opened here closed I can make another channel here make a little
+ channel here channel here because it broke out channel you know you see how
+ how price changes like per per time per per part of the day and then here at the
+ end it actually becomes a little bit crazier again so aside from like this
+ little breakout this little thing not much happens you know like here a little
+ bit I guess but you know you see there's a lot more movement here and here and
+ that's something very common actually around lunch which for the US I'm in
+ different I think it's I guess it's probably around here you know middle of
+ the day you see that this one candle that I could have had for one day has this
+ much information a lot of these periods are different meaning one row in that
+ excel sheet is not the same as the other which is creating what I said this
+ noise to signal which is why actually modeling interday becomes very hard
+ because you have to constantly kind of reassess what kind of environment you're
+ in which is also what creates a very hard environment for discretionary
+ trading right that's why if you compress this to only a O L H C you just
+ create a more denser compression of info you know because then you're catching
+ this whole thing in one information bar which is why for example if I now plot
+ this back test you can see that it starts looking messy you know it starts
+ looking bad it was looking good in the beginning and that's why I'm telling you
+ it's bad because I knew what to show you these differences here along with
+ other ones but this is the simple reason simple one that I want to give you is
+ why when you start moving up and the noise to signal ratio becoming smaller
+ makes back tests look better because the movements and the bar entries meaning
+ also the bars entered here start looking more significant and are more
+ significant and the measures of that of that autocorrelative aspect become more
+ reliant because the values start getting smoothed out right like we're not
+ smooth trying to smooth out values you know like the average of the last 200
+ bars being you know like launch opening hour no no it starts being like 20
+ lunches and no no it starts being 200 times lunch and 200 opening hours right
+ and that's why when you smooth that out the values become more consistent and
+ you actually start supporting the auto correlation that happens and it starts
+ becoming the reason why suddenly oh this little equity curve oh it looks better
+ we're gaining more we're gaining more okay okay what if I move up again you
+ know this is why swing training becomes more consistent okay we're more gaining
+ more again okay it's perfect profitable trades it's up it's up it's up you know
+ it's why because then the data becomes more actually it actually starts
+ supporting momentum effect and auto correlation factors and just by moving
+ up in timeframes suddenly boom it's really good it's golden cross by the way
+ so that's just a common use measure right but suddenly something like golden
+ cross which is a strat that's used by like virtually everyone becomes very
+ tradable right and it becomes doable on actually a lot of assets you know like
+ it starts looking good on a lot of things and and that becomes the magic of
+ supporting that auto correlated factor and why swing trading and momentum effect
+ have such a strong synergy instead of trying to measure just over lunch and
+ opening hour you want to be measuring 200 lunches and 200 moving 200 opening
+ hours because then the values become more constant and the auto correlated
+ factor of the momentum effect starts having a real contribution and that's
+ why specifically for this I'm doing swing trading and it's also because the
+ alpha decay due to a lot of volume right and liquidity which are all of those
+ market microstructure factors they are so high that you cannot get alpha decayed
+ like who's going to exploit you at the point that where you're trading in on
+ daily interval it's gonna take like all of the Fang CEOs to decay or alpha it's
+ what actually totally okay with putting one of my best systems out there which
+ is this one by the way it this one has lasted me three years and I don't mind
+ that in this course I'm going to be essentially giving away my alpha I don't
+ mind because on these timeframes it's virtually impossible to do it there's
+ many nuances to it some of you might you know be able to capture my logic and do
+ it better improve upon it right and but there are some more techniques that we
+ will start touching on you know like I'm rambling a little bit getting a little
+ bit of topic but you start to see why making those data values more
+ significant helps you know because you smooth them out you improve the data
+ quality right by lowering the noise to signal ratios and it becomes alright by
+ the way the non-stationarity it's in part dealt with because doing something
+ like an average or using a mom kind of normalizes values right like when you
+ divide something divide one value by the other they become normalized and when
+ you're doing moving average crossing over which is what this is they cross over
+ from each other and they're always in a range from each other making it a kind
+ of a ratio more than anything which is why again candlestick analysis like
+ discretionary trading would never work which is some of the ways that you can
+ kind of combat these inconsistencies with price once you start moving to the
+ ML domain though machine learning this becomes a whole different story but I've
+ just explained you a problem with price but why we're on daily interval to
+ combat just that now to start improving this same methodology now that we have
+ you know done something very simple to improve data we can actually start
+ improving the values and put it into these indicators the formulas behind the
+ indicators are often something like is and or sorry Jesus Christ why am I doing
+ that is something like n is to 200 and that creates a value of you know the
+ average last prices now this one is okay it's 529 let's say right it doesn't
+ really matter I don't know it's 200 yeah so it's 529 right and 50 is at like 580
+ so 50 is 586 right so we're talking a lot about the improvement of data values
+ now there's a lot of things that you are inserting into these TIs it's the raw
+ input you know of these values but how do you improve this more well you can
+ also change the inputted values right you can change 200 from 50 and when you
+ start changing these the moving averages change and your entry rules because
+ for this strategy for example when one moving average crosses over the other
+ that is the buy or sell rule that's what you're going to program in and then
+ you've created a little algorithm you know and by improving these values those
+ values change because this one just became 598 and 25 you know so 255 98 and
+ by improving these the results of your strategy become better or worse so by
+ improving the raw input of data values but also improving the treatment right
+ so it becomes like a production I show you the treatment of the value like for
+ your buy and sell rules things change and then the total outcome of your
+ trading changes you know like the actual decision making behind it and that's
+ when things become interesting so how do you find you know the best combinations
+ of these now that's where a lot of data scientific principles come in

@@ -1,0 +1,75 @@
+ So in the last video I basically said that momentum measures are a measured
+ difference from one day to the other causing autocorrelation patterns,
+ autocorrelative directions basically into one direction
+ that in a cruel created trends that are explained by momentum effect, explained
+ by behavioral bias, market misinformation, data misinformation and
+ microstructure differences. Now how would you measure that then? That would be
+ through technical indicators because they are some of these measures that can
+ find you a quantification of the differences of one of the days to another,
+ right? Like the absolute momentum filter that takes like yesterday's close, today's
+ close, what's the percentual difference between two, maybe take that over, you
+ know, over an X amount of bars and then you can find like measures,
+ quantifications and these things could then somehow maybe comprise an algorithm
+ to be used in a quantitative finance system, right? That's basically what a
+ technical indicator is. That's why here I have plotted moving averages, what's a
+ moving average? Obviously that's the average outnumber of a certain amount of
+ periods, every period is a bar, you know, in this case I'm on the weekly chart,
+ and that is here. One week is one bar, if I go to the daily, obviously that
+ changes around a lot, a lot, a lot, a lot, a lot, a lot and then you start having
+ something like a 200 day moving average, right? So every day is a bar, 200 days,
+ 200 bars, 200 day moving average, 200 days of measure giving me that
+ autocorrelative pattern of differences to measure the momentum effect to try and
+ exploit a trend. That is what I want you to go to bed with. If you can't get that
+ into your head, please PM me on Discord to give you the money back. That is
+ really, I think the simplest explanation I can give, right? Okay, so technical
+ indicators are the measures of the autocorrelative directions measured in
+ quantity in number in data value, right? So value being a number given like n is
+ 200, 200 daily because we're doing daily bars, you have one hour bars, blah,
+ blah, blah, blah, blah, blah, that's for the beginners watching and now I want to
+ move on to big boy stuff, right? Because I want to come with some evidence here. I
+ want to of course not be stuck doing basic terminology at the same time I said
+ this would be a beginner's course if you get me, okay? Here's one. This is a
+ measure, I've quoted this one in one of my videos before, however, here, 10 day, 20
+ day, 50 day, 100 day, 200 day. This paper, by the way, will be leveraged for the
+ long run, leveraged for the long run systematic approach of managing risk and
+ magnifying returns in stock, Michael a gate, CFA, right? Scrolling back. Here you
+ go. SMP annualized volatility above and below moving averages. So again, that
+ measure, the technical indicator, technical indicator wise, technical
+ measure, the numbers, giving that momentum effect, the auto correlative pattern, blah,
+ blah, blah, okay? So here you can see, and this is evidence, this is data analysis,
+ of course, you know, they plotted volatility below the 200, the 100, the 50, the 20, and
+ the 10. The volatility was higher every time. The volatility was lower above every
+ time. Recessions expanding expansions and moving averages, very long back test to
+ by the way, look at that window right there. Percentage of time above, a percentage
+ of time below 200 days, blue, blue, time above, time above, recession below, like
+ that's very bad, right? Like you can see how what I just said, right, which was
+ ways to exploit swings and follow trends are these technical indicators, they are
+ quite effective at it. But you can see some differing values, right, like 10, 20, you
+ know, there's there's there's some differences, right? Apparently, there's, you
+ know, certain values here, there are differences here. And that's something very
+ important. I just want you to absorb these numbers right now, you can see some
+ differences, right? I'm going to try to, you know, upload a certain logic onto your
+ brain as we go right now, I'm just trying to convince you that technical
+ indicators have some merit to them, you know, here, S&P 500, worst 1% of trading
+ days, percentage of time below moving average 1020 again, similar numbers, similar
+ but different, similar but different.
+ Right. S&P 500 consecutive positive day streaks below very low.
+ Positive day streaks two up three up four up. It's all leaning towards one side. It's
+ all very definitive towards one side. Here, this is a paper that measured a mom, so the
+ difference in percentage. And you can see the charts, right? Here you can see a chart
+ where basically none was applied. And then if there was a percentile difference, if there
+ was a percentile negative difference, they would exit and you can again see like strong
+ reductions. You can see very strong reductions. Now I'm going to move to my own
+ chart because these papers, they give you something made by doctorates, not some dude
+ making Instagram videos, but they underpin a scientific foundation that I need to give
+ you many more papers like that. The momentum effect, one of the contradictions to affection
+ market hypothesis is one of the most well studied things. Okay. Like it is one of the
+ most well documented things in science. I come to that later, but it's part of why
+ alpha does not decay. Here, you can see the difference between the two.
+ Here, you can see the well defined trends that occur, measurable with the technical
+ indicators and exits that you can start generating when you apply them correctly.
+ And the risk that is cut down very much max drawdowns, blah, blah, blah. You can
+ really see how here the TIs, the technical indicators are really great measures of trend
+ here. But this moves me to the next topic where why certain intervals are not the same
+ as the others. As you can see, if I start switching this around, you start seeing some
+ shockiness in some of these, you know, you

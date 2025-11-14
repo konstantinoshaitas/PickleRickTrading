@@ -1,0 +1,14 @@
+
+yfinance==0.2.36
+TA-Lib==0.6.8
+numpy==2.3.4
+pandas==2.3.3
+vectorbt==0.28.1
+scipy==1.16.3
+matplotlib==3.10.7
+seaborn==0.13.2
+scikit-learn==1.7.2
+ipykernel==7.1.0
+notebook==7.4.7
+PyYAML==6.0.2
+

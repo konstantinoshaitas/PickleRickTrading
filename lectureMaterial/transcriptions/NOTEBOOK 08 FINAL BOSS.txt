@@ -1,0 +1,499 @@
+ Welcome guys to my most long-awaiting amalgamation of material I would say.
+ This will be basically the final chapter of what was the bootcamp right?
+ The bootcamp very much is just practical steps right? Like you may have noticed
+ it's a little short or whatever but that's because it's just direct steps of
+ a system that I've ran for years and it's just direct do this do this you know
+ it's very to the point that's kind of the nature of it right because that's
+ just the exact steps that I took to run a system for three years. Now then I made
+ the lecture the first one about managing a quantitative portfolio but it was
+ purely theoretical of course which is you know maybe a little bit impractical
+ what do you do with it now that's where this video should come in obviously I
+ have to work on a system but refine it a bit etc to get to a point of where I
+ can showcase certain things and where you can actually draw the conclusion and
+ maybe have some more framework to go by which is what you know I'm obviously
+ going to highlight right now haha you may have seen them screenshots it's
+ looking pretty good it's like a concoction of theory that I had for a
+ very long time so I'm gonna break that down basically and how you put it all
+ together at the end of the bootcamp is that you have a vague idea of how to
+ construct maybe one or two of these like what I laid out to get a triple
+ exponential moving average and a magdi right because those at least from my
+ experience have worked very well you know obviously I also just recently
+ released six videos more to come obviously depending on when you're
+ watching this or whatever but about answers to prices of dry drivers of
+ price right so that's again you know more theory but that's also like a thing
+ that I'm sharing because I'm trying to answer certain retail trading questions
+ and actionable frameworks now obviously I'm a one person so it's not like I
+ tested every indicator under the Sun I'd love to do that but we all have our
+ schedules I laid out triple EMA and map the because I know they work fairly well
+ on those sentiment strong assets right when they're not sentimentally
+ sentimentally strong momentum effect has less auto correlation and you get into
+ these side zones where some of the automatic mistakes of indicators can
+ happen like false signals they may deem the regime to be up but it's not
+ measuring the severity of regime so you can make that stronger by putting
+ algorithms together because obviously they're all in a sense uncorrelated so
+ when one has a stronger trend and one has a weaker trend they're obviously still
+ going to have a middle line in between them right that's why mixing bots and
+ using them in combination has a much stronger sharp ratio when you put them
+ together when you make them and they're uncorrelated enough in a normal
+ financial traditional finance sense they're also stronger together because
+ if one goes up one goes down other way around I mean then you get the middle
+ line and you have an average right and if your theory and your stocks are strong
+ enough that line should at least be you know above at least the zero line
+ meaning that in general you should be gaining money now traditional finance
+ eventually they put together the efficiency frontier the efficiency
+ frontier is one that I showcased earlier I believe and the efficiency frontier is
+ something that looks like this right it takes all your assets all your return
+ curves plots them essentially along this line and finds you the portfolio
+ collection that has the highest sharp ratio right with the point of
+ diversification right because if one is much more volatile doesn't return as
+ much it's going to get a slower allocation so because obviously the
+ return and volatility which amalgamates sharp ratio in its formula they will
+ give more or less percent to a certain asset to achieve the highest possible
+ sharp ratio which I will show off in a sense but to tell you and how to improve
+ upon that because in my opinion at least the efficient frontier is something
+ that's inherently kind of an overfit concept because you're fitting it to a
+ sharp but it's based on history right so it's fitting a curve quite literally I
+ mean they call it the efficient frontier it's a curve here this line plots
+ different sharp ratios like portfolio a has sharp ratio this portfolio be a
+ sharp ratio that so how do you dynamically change these things around
+ now an efficiency frontier like here will give you certain allocations right
+ it will put together the individual sharp ratios so this one's gold and of
+ course the S-Po one has a certain sharp ratio the Nasdaq has a certain sharp
+ ratio Solana triple Nasdaq Bitcoin they all have certain sharp ratios now it's
+ going to be giving each one of those assets a certain percentage right so
+ the gold will have like I don't know 30 because it's like safe now Bitcoin
+ obviously is higher so it's going to give it three because together put
+ together they all in the individual sharp ratios like X you know like X this
+ 3% put together of course to a full of 100% allocation of portfolio will give
+ you an amalgamated aggregated sharp ratio which is then your highest possible to
+ achieve obviously you could also you know divide them by mean like let's say you
+ have these six obviously it's going to be a hundred divided by six but that's
+ obviously not going to be the strongest sharp ratio if you're going to calculate
+ these all together that's where something like an efficiency frontier is very
+ useful but that would still not answer questions of like which asset is trending
+ the strongest and I've quoted this paper a bunch of times but in the ranked
+ asset allocation model which is in essence just a dynamic reallocation of
+ rank by month which is in a sense is just a ranking depending on a periodic
+ reallocation like a reshuffle of all the assets is a cross sectional
+ momentum model meaning cross sectional meaning across different sections in
+ this sense you can measure the underlying momentum of these assets to kind of
+ catch certain assets trajectories in relativity right the cross sectionality
+ happens by relatively comparing different assets which they do in the ranked
+ asset allocation model in the ranked asset allocation model they are
+ comparing the momentum scores of the 12th portfolio which is like a large cap
+ mid cap small cap I think this is international emerging markets like
+ Dow Jones commodities materials right they're tracking the relative momentum
+ scores of these assets to always be allocated to the best one you also have
+ from the same author the anti-fragility asset allocation model where they're
+ measuring different sectors of the SMB like financials industrials
+ communications, technology blah blah blah and in an anti-fragility asset
+ allocation model they often quote or note they quote Nassim Talib which is a guy
+ that you know work with the fat tails where you try to prevent black swan
+ events right because if the momentum in financials is higher but tech is about
+ to have a crash obviously they have negative momentum and if they are a
+ negative momentum obviously it's a downtrend and you probably don't want to
+ be in there in a position or you want to be shorting it now the big downside of
+ this is that momentum and stuff the of these underlying assets are not
+ optimized at all so the basic premise is that if you put one and two together
+ which is much like the ensemble theory that I've been quoting a lot where you
+ try to catch different drivers of price right
+ you can also in a way cross and mix match perhaps the relative
+ consectional momentum like they do in the ranked asset allocation model but you
+ can also do it by comparing the different assets to each other so what I've
+ done in what I believe is a super strong approach to retail quanting at least
+ and should also you know hold true in a lot of other aspects if you do go into
+ a job it's at least an interesting approach do believe that quant finance is
+ a very how do you say it dynamic industry right like the thing is that
+ there's a million answers you know there's people that go on one hour time
+ frames on two hour time frames that there's not one universal answer at all
+ so by all means try to find something else this is what I've conducted and the
+ sharp ratio is pretty good if I say so myself right so basically these
+ individual algorithms are obviously very good for one asset why I mean in the
+ sense that when I want to compare the relative strength of all is that I
+ start comparing all six right so you have a measure for one asset and you have a
+ measure for all six which then if you let's say like in the around asset
+ allocation model you assess yourself to be in the best x you know like the top
+ end of this which they do in the ranked asset allocation model they only hold
+ the strongest risers the lowest correlators in this case I'm only doing
+ momentum by the way but that's besides the point but if you put that together
+ you can in a sense without directly addressing it like I'm suggesting you
+ do with superior modeling than just using a 3ma or a macd you can also
+ address it by just always being in the strongest riser but that is also decided
+ by its at least its individual algo to be in an uptrend so you in a sense kind
+ of put together in confidence and in parsimony you put together two strong
+ strategies that have worked because the ranked asset allocation model has
+ actually won a price the anti-frigility asset allocation model has also won a
+ price I've run these different algos for years right their sharps are already
+ strong they are not like something that can overfit it's just putting two things
+ together because you're going to be hedging yourself against the downturns
+ which is well documented and has won the price you know these people have one
+ monthly you know so the peer review at least has been conducted in a sense and
+ put that together with something like I'm suggesting which you in the bootcamp
+ and arguably you could achieve a higher ratio which I'm going to show you now
+ fun fact right but that's the basic theory you could also do an efficient
+ frontier it's much faster to do but because the efficient frontier is purely
+ back-looking right it's based on history and it's what I did here this is like
+ basically kind of a curve fit to the perfect allocation that you should have
+ had but this is an optimization based on like five years of data so why do I
+ know that gold is this okay maybe but it gives you a good reflection on what
+ could have been the price action that you could have you know had given you were
+ there from the start I guess if you will now to also tell you when you start
+ putting down the bootcamp stuff this is basically how much notebooks I was
+ working with right like I was testing Google I was testing Meta I was testing
+ the semiconductors that I was slapping more indicators over assets than
+ putting indicators on assets themselves right so I was slapping indicators like
+ that's where my rotation was in a sense right because you can much like I'm
+ suggesting you do make these different algorithms better by using different
+ indicators which a lot of people in school are doing which is super cool by
+ the way you should definitely do that which can give them better answers to
+ mean reverting actions but this these are things that I address more in that
+ section of the course I'm gonna keep that short but arguably if you use
+ something that's not only a trend indicator like a triple EMA or a MACD
+ you should be able to address mean reverting or choppy action better because
+ you are using indicators that are more tuned for this right they're addressing
+ one of those different drivers of price action very much right so another way to
+ do that of course is by having different indicators that obviously are
+ uncorrelated and by having their relative in at least in accordance to
+ each other momentum addressed you will always be in a stronger trend right so
+ you have one asset that just has to go you know basically long and then at least
+ if you have a score that's also comparing 3 4 5 and that's keeping score like
+ oh this one's maybe the second this one's the first score then at least the
+ top two ones are going to be in a great trend at least in the relative market
+ sense because they have been compared over the whole portfolio but they're
+ not comparing to you know the other you know they're only comparing to their own
+ price data but this will also give you a measure of the whole portfolio together
+ which gives you a lot more robustness to because if one algorithm is under
+ performing the other one can pick it up which is a very simple concept but it's
+ only going to net you very well in the long run and it's also what you will see
+ in the sharp ratio that I'm about to show you so to get to the beginning of
+ the notebook but but but but but but but yeah it's a scroll right so here I am
+ is okay so getting to the top okay but but but but but but by RSI and RVI that
+ that the okay so here I imported the notebooks yes okay so what you see here
+ is obviously the bum fuck of a of a folder that I had right obviously this
+ is me working it's very chaotic like what the hell is going on in this file
+ structure I'll show you shortly here I for example I'll just take the SPX house
+ an example I obviously gave you the three main notebook I optimized I also ran
+ on a rune and a magdi I then ensembled the best combination the ones that I
+ found to be most fit for this purpose right the ones that were very much the
+ best at that particular case with the indicators used could you improve them
+ if you use different indicators fuck yeah please improve me I'd love to see it
+ it's just that this work for me in this particular time I'm educating more than
+ I'm modeling because you know I'm doing two things at the same time it's a lot
+ of work but yeah you could improve you could you find a better indicator than
+ MacD and TMA triple MA yeah you could just this is what worked for me in the
+ time and was the most is like the most pragmatic solution for me in time as I'm
+ doing like what for different side projects working on a lot of stuff you'll
+ love it just wait and see but this is what worked for me in time so these were
+ the best indicators for me right now okay so don't take this as like the the
+ magnum opus I made no I could have spent probably three more months modeling
+ but it's the result is very good because all of these are a sharp ratio of give
+ or take 1.5 it also depends on acid by the way like Solana gives you a very
+ very very high sharp ratio but if you put that together and you start comparing
+ the actual volatility to each other and the sharp ratio of let's say something
+ safer like the S&P will have a lower sharp but also much lower volatility
+ which is something that gets put to light when you you know use the efficient
+ frontier because it's going to be holding a lot of gold right so if you put
+ them together it's going to actually put use a lot of more less Solana unless
+ you obviously try to optimize with the efficient frontier for returns then
+ obviously Solana is going to get a much bigger allocation in that sense because
+ it gets weighed up but if you're optimizing for sharp much like I in the
+ ranked asset allocation model you're doing a relative momentum if you're
+ doing a relativity measure for returns obviously something like crypto is going
+ to get a bigger allocation but if you're optimizing for a sharp ratio
+ obviously something safe like gold is going to get a lot more attention from
+ this right so I put it all together blah blah blah I took it from my folders
+ yada yada yada here I imported the datasets are as follows right I have the
+ time series so I can merge them you know like a join I have positions right so
+ zero is just flat I'm not selling I am out of the money I'm doing nothing then
+ you have the strategy return and the underlying buying hold return which is
+ very important for the relative measure right I'm not measuring strategies in
+ relativity to each other I'm measuring the returns of them all together here I'm
+ joining I'm plotting a little correlation matrix not that important
+ honestly here I have another one here you do see by the way that buying hold
+ correlations they change right and here I just plot it again just for good
+ measure but it changes not that important honestly to cover and I would be
+ wasting more time than needed what I do here and this is a key point I am
+ computing an RSI for 28 periods I'm not doing 14 because I believe a slightly
+ longer look back is going to give better smoothed values but in turn RSI is my
+ current choice for a momentum measure right so this is what I'm going to be
+ measuring the cross-sectional momentum with right like what they do in the
+ ranked asset allocation model they use absolute momentum which is previous end
+ close compared to today's end percentage difference RSI is average
+ percentage gain divided by average percentage loss I have tested ranked
+ allocation model a lot and I found the RSI to be slightly better obviously it's
+ still very simple it has only one parameter like the end look back but I
+ believe it to be the most sound version for me specifically in this case because
+ this is what I've tested and it gave me better scores so that's what I'm using
+ you are free to use anything else by the way you can use maybe even a flat range
+ with an MA that might work better for you who knows who knows right I guys I've
+ been preaching this for a while but the concept of doing the throw it at the wall
+ see what sticks I I'm a firm believer right if it was possibly to be a
+ missionary for something I would be a missionary for that thing it nothing is
+ set in stone right it's all just a different interpretation of a data
+ value giving you a different output it's very dynamic there is no engineering
+ here it's very much even a little bit artistic so here I start ranking so why
+ am I ranking if you read the ranked allocation model paper maybe it's better
+ to understand this in a deeper sense you might have to but that's what I did in
+ this case yada yada yada might be useful to read to understand it but I'll try to
+ explain it shortly here so basically the RSI obviously is a normalization of the
+ values you know you have the average gain of the underlying and it's of the
+ buy and hold just to remember you right this is not of the strategies that you
+ make in the bootcamp but this is the highest a highest average gain like
+ average gain I'm not sorry that it's not the highest average again it's the average
+ gain divided by the average loss which is obviously going to create a value
+ between zero and 100 because it's this one this is one of those bounded
+ indicators now what I plotted is not a buy or hold or something at 1730 which
+ is more typical with the RSI I plotted it to it to be right in the middle because
+ the point of this is to start comparing I want a relative measure of all the
+ momentum at these places in time and I want them to be above 50 at least one
+ of the most critical things they did in the ranked asset allocation model and in
+ the anti fragility asset allocation model is that if the momentum was below
+ zero which is their middle line right because it's either because it's an
+ it's a percentage change right you have because it's the close of current
+ compared to the close of you know like let's say 30 days ago you know compared
+ to n ago there's obviously a middle line at zero this one normalizes between a
+ zero and 100 so obviously the middle line is at 50 but given that and the
+ biggest effect that the ranked asset allocation model has aside from being a
+ good relative measure is that they have sort of a mask they have a hedge that if
+ momentum goes below a certain line if it goes negative you go out of the
+ position and this allowed them to actually hedge for the giant giant black
+ swan in 2008 so if you have your own the like the discrete algorithm for one
+ asset for one return curve but you also have it in relativity and both of them
+ are essentially just risk reduction measures for black swans and you put
+ both of them together in two by rules because the only thing you're doing here
+ is adding a by rule for a portfolio and buying a poor by rule for an asset if you
+ put both of them together your risk adjusted metrics become so good and you
+ will see it in a second it becomes extremely good because you've seen it
+ and it's proofs in the pudding here and I'll show you for a second right like
+ this one on gold do you see how little this max drawdown is that's 7% that's
+ also in the efficient frontier if you paid attention a second ago why when it
+ optimizes for sharp that it allocates like 45% of it why it's just that damn
+ good but if you then also add the ranked asset allocations magic of when
+ there's a negative trend and at least in this case it's measuring that in
+ relativity right so it's sorting it's shoveling through all these assets
+ because it ranking them consistently per month yada yada yada then you can have
+ two extremely good risk managing rules that will help you be in a better
+ position parody much at all time but by putting them together you can create
+ confidence by measuring one asset and also all assets together which turns
+ just one strategy or something not as refined into a great portfolio management
+ strategy with not even that difficult of numbers and you will see that the
+ sharp ratio really improves right so here you can see through the time series
+ would plotted by like till 60 here let me let's make this a scroll element right
+ that it's ranking by day right so here you have the Solana rank the Nasdaq
+ rank the Apple rank and the this is a semiconductors from funnec so rank to
+ blah blah blah it keeps starting it's keep sorting right and I made it to be
+ zero because you see that right there right so you might be thinking like
+ why is it zero I made it zero if it's below 50 right so I'm making a ranking
+ system I'm making a time series I'm plotting it across all strategies and
+ when it's zero I wanted to be out like that's my one exit rule if it's not
+ there I'm not going to be looking at the bootcamp strategy I'm not going to even
+ care about it right and that's something I put into the logic later as well okay
+ so here I'm John joining I'm ranking on on the dates and there I'm joining and
+ ranking the ranking the F in the strategy F on on the one value and here you see
+ the time dates blah blah blah the returns yeah they are the other extract
+ here I'm defining that I want to be holding the top four I'm working with I
+ believe it assets and one thing and a measure that I took from the optimization
+ right I want to have a safe haven haven asset right because the logic of
+ courses in the ranked asset allocation model that I'm only going to be holding
+ top and assets right I took four because that gives me a nice spread it's like
+ 25 per but what if my top and is not there what if all my underlying
+ discrete algorithms the ones that I made in the bootcamp are all exited well then
+ I want a safe haven asset like gold right I wanted to be in gold so sometimes
+ you'll see and you'll see it in a second that maybe 50 to 75 percent gets
+ allocated to gold right that's something I did very did it I did it
+ intentionally because this is my safest asset you saw it max drawdown seven so
+ if nothing is decided by my indicator algo from the bootcamp or by the RSI to
+ be actually good to hold like to actually have a strong trend then I don't
+ want it I just don't want it I swipe left right I sound like a fucking retard
+ right okay so this is the biggest logic and I'm going to have to explain it here
+ here it starts allocating right and you see a few statistics right like
+ days in cash one six three days of partial allocation so not like four in you
+ know no top four held so 463 full allocation 826 allocation changes 416
+ days with gold 467 you obviously see there's a lot of gold happening yeah
+ okay so here I started checking the logic a bit because obviously when you
+ start constructing like a big chain of decisions of what to hold you want to
+ you know sample what you're doing this is also really what you should be doing
+ when you are managing your portfolio but yeah okay so here it gives you
+ partial allocation why gold is one position is zero so my safe haven asset
+ that I wanted there to be as backup you know like it's your backup it's not on
+ that it's deemed to be because this position one is the one from the
+ underlying strategy it's not fit to be an uptrend so I wanted to go to zero gold
+ is not being held because it's decided to be zero by its discreet algo it is
+ however ranked one apparently but it doesn't matter right because the buy
+ rules here are very much yes and yes then I enter and if it's not I wanted to be
+ out the only exception of course is that I have my safe haven asset which I want
+ to be held if possible at all times because I would rather be in a position
+ and be in a market than not be right I don't like being in cash because I
+ won't make money basically SPY is deemed to be long and is a position 3
+ there's Apple at position 1 and it's 25% then here I'm also sanity checking
+ nothing is deemed to be positive but the discrete algos are so what happens here
+ of course is that you start seeing the magic happen the whole market apparently
+ is in a downtrend but these algos are flipping green respectively but that
+ doesn't mean that the relative market or the overall macro economy is good so I
+ am at zero and this is actually one of the worst years as you'll see when you
+ back test right here one two one okay so I'm selecting top four of course though
+ this one's zero so you see that it flips to gold right so the discrete algo is
+ actually telling me not to hold a whole apple but my relative one says it's
+ alright I get like I can't hold Apple of course because it's
+ persisted to be zero so in that case I just go to gold because it's my safe
+ asset right which was also decided by the optimization frontier and also to be
+ fair if you have common sense you would know that gold is pretty safe to hold
+ of course so here obviously one one four one three one two one okay you know
+ then it holds all four perfectly fine one one four one two one three one now
+ perfect allocation again so here again the summary allocation changes for 16
+ days would go to the here you have a ticker participation here of course max
+ weight is a hundred because I assigned it to be my safe haven asset but you can
+ switch that out you know like you can also try to have it be on NASDAQ if you
+ have a super good NASDAQ algo maybe you wanted to be the S&P maybe even you want
+ to go short you know if the whole economy is in is in fire why don't why not
+ go short you know you could do short I generally don't advise going short but
+ you know you're free to try by the way you know I'm trying to encourage
+ creativity and I'm just throwing ideas at people but you're free to do it so
+ verify weights blah blah blah blah weight statistics expected total blah
+ blah DQQ days in here you just see kind of a division of like how much was
+ approximately held this one okay days six on four that the that that you know
+ that's all good not too interesting actual mean blah blah blah it was just
+ another send the G check for me to of course make sure that the actual gold
+ book makes sense notebook makes sense here you kind of see like a returns per
+ day yada yada yada comprehensive back test here I start a integrating vector
+ BT blah blah blah blah here a lot a lot a lot a lot a lot a lot a lot a lot a lot
+ you can see it's a lot of metrics a lot of visuals but you know I think it's cool
+ right so commission was 0.1 total of commission paid is 9.1 number of
+ rebalances again 416 average commission the the annualized sharp came to be this
+ not that great to look at let's look at the visual okay so this is probably what
+ you may have seen given you were paying attention to the discord this weekend
+ total return this is by the way over five years okay so because I plotted
+ Solana here Solana didn't really have much data at least from Y finance before
+ 2020 so obviously this is cut off but if you know and watch the bootcamp you know
+ that anything before was training data so you know who gives it down really okay
+ you see a pretty good equity curve it's flat here and this is 2022 and if you
+ remember 2022 you know it was not a good trading here then it slowly goes up and
+ this is then actually all out of sample so very much you could just you know
+ forget what the fuck is going on here this is all out of sample data so you
+ really see how strong these two become in relativity to each other right sharp
+ extremely high none of the underlying assets are actually above like one I
+ believe my Solanas 1.8 my NASDAQ is 1.6 my Bitcoins 1.41 my TQQ is like 1.46 you
+ know that those are very good sharp ratios like by all means because these
+ are very much benchmarks of their underlying assets you know like Bitcoin
+ you could consider it an ETF very much because it holds like the largest
+ market cap and it's the first thing that has inflows of money when entering the
+ market so you could consider it an ETF you could literally just trade off one of
+ those algos that's actually what I did for a super long time but when you put
+ them together and this is also why like if you start modeling and I recommended
+ it to another guy I would give it as an advice in general but once you start
+ just combining like different elements of things like if that be an indicator if
+ that be you know in an ensemble sense if that be like a portfolio where
+ anything can start becoming uncorrelated but if you put a view uncorrelated
+ super strong algorithms together you start seeing what happens right like I'm
+ measuring in relativity and with the cross-sectional momentum measure of an
+ RSI that I'm giving it a score I'm just rotating through them right and they
+ rotate every time a change happens and then you know they start having a lot
+ of confluence together and the effect is just absolutely exponential because by
+ rotating and having those two let's say black swan or risk reducing measures
+ improving risk adjusted metrics Rick big big Rick rap okay cringe okay dude but
+ by adding those two together you can see that the max drawdown becomes super
+ good right because the discrete algo is super good at the respective price data
+ of that one return curve but it's not great at measuring the overall economy
+ because it's not because it's not measuring that right because the sharp
+ ratio on the Solana might look higher but that doesn't mean it's necessarily
+ losing less because the volatility is still divided by like you know return
+ divided by full it volatility it's just in respect of that assets price data in
+ this sense I'm putting two great measures together which is that relative
+ ranking and the discrete algorithm for one asset so you can see how by rotating
+ through them and taking some good spice from one place and taking good spice
+ from another you create this amazing parsimony where the max drawdown really
+ is just 13% right and the sharp ratio is insanely high and the Sartino ratio is
+ incredibly high cagger okay look this is not like Renaissance you know this is
+ the five years this is not 30 years running but the cagger is extremely
+ positive and both systems are very robust because a relative measure to exit
+ below 50 at every change of trade from underlying assets in top end is not
+ something that is overfit in any sense because we already did on every asset
+ we already did three years of out of sample running now we're just putting
+ them together so they can correct each other much like the ensemble it's just
+ gonna exit and give you more spread this is not overfitting this is
+ diversification which creates a super robust portfolio I have zero problems
+ running my entire portfolio amount of money on this right now and I'm gonna
+ I'm gonna do that of course this has been a baby I've been sitting on for years
+ now I executed because you know I actually have some damn free time being at
+ the bank all the time isn't actually that fun it's not it's not okay but this
+ is the result of me just thinking about it for a while right and you can see
+ that it works because you are just diversifying you're just doing an
+ extra measure the ranked asset allocation model is very strong there's
+ multiple papers of the same methodology just ping me up I can find you like five
+ there's been even a paper with a decade of documenting these these relative
+ systems it's super strong there's super super amounts of verification on a
+ citation basis basis for them putting them together like having a
+ specialized measure for one asset with a relative measure just really works if
+ you can set this up you're set for life you you can cancel the school don't
+ please I want to make more for you guys please but you could in hypothetical
+ sense like this is so much better than buying holding any asset here you can
+ see how you know low and limited days really are I do believe I have another
+ print here you can see like kind of the the performance by year right so if I
+ make this scrollable for a second blah blah blah return here you can obviously
+ see that 2022 was a bit shit right but you can also see full allocation it was
+ not allocated all the time right so it was in cash which is this measure 55%
+ of the time which means because in the beginning of 2022 there's a big big
+ dip right so you had the big deep and we went all to cash because the relative
+ measure for the whole economy basically said yo this sucks our size below 50
+ we're not gonna do this so it was literally just flat for most of the year
+ but hey that's a whole lot better than losing money now you could you know maybe
+ in this case of short look at how little happens here you know not being in a
+ position not losing money is actually secretly winning you money because
+ nothing in this school that I'm telling you is helping you make more returns
+ it's just stopping you from losing money which in turn earns you money like if
+ you focus that mind the setting shift chasing trying to chase returns and
+ trying to just chase like risk adjusted metrics you'll actually end up making a
+ whole lot more money fun fact right and then these three are all full out of
+ sample you can see the returns obviously 2025 isn't completely close yet return
+ 28% 38% 84% now that's phenomenal beats the market by a long shot of course
+ if you have been looking at charts for a while you know here you see the final
+ allocation obviously 33.5% okay this these calculations are completely
+ correct by the way but it's in their relative sense okay because it's measured
+ like this so max weight 100 of course average one health 45% so a lot higher
+ of course it's just science it's just making sure all the calculations are
+ correct allocation distribution who cares who cares who cares
+ what's down here per asset okay this is all not that interesting I'm just gonna
+ show you the optimized portfolio for a second obviously like I've been saying
+ if you were chasing returns Bitcoin and stuff would have been a lot higher gold
+ obviously being the safest asset is very high even in an overfit sense like
+ kind of like an optimization is the sharp ratio is not that much higher like I
+ said if you're chasing returns Solana you know if you're gonna optimize a
+ portfolio for anything but a sharp ratio like returns or max drawdowns or
+ something of the sort if you're gonna minimize drawdowns it's obviously also
+ going to hold a lot of gold if you're gonna be chasing returns it's going to
+ allocate a lot more to crypto here you see you know this kind of these I'll
+ deal eyes measures so you know what it very much is also that if you put the
+ optimization on top of your notebook it's going to give you the most realistic
+ outcome right so you have a kind of a nothing not even an overfit but it's
+ going to give you the most ideal scenario which is not overfit that you
+ could you know strive to have because it gives you the most ideal allocation
+ over all this time if you take and optimize for a sharp value sharp ratio
+ it's obviously going to prefer and prioritize a very you know efficient
+ risk-adjusted metric allocation assortment for you and that means that
+ if your highest allocated one in maybe your respective portfolio is maybe
+ Nasdaq or I don't know what what what would it be like T bills I don't know
+ for you know who the fuck models T bills but maybe you're modeling T bills it's
+ going to give that to that particular asset and it's going to get the largest
+ percentage because it's you know kind of compensating for all these crazy other
+ assets that might not have as great of a sharp ratio in the relative sense
+ running sharp really good and this is all pretty comparable to the moment
+ model above which means you succeeded by the way here it means that if you were
+ never shorting in this time it means you were not gonna do it this is the year
+ 2022 2022 2022 simply sucked if you had intraday bots in this year you would
+ have performed obviously much better swing trading is the only downside of
+ swing trading is that you're still very married to external factors while
+ intraday bots are more consistent but again much harder to model I believe I
+ have said that a few times this one is kind of cool optimizes for the Omega and
+ you will see that the Omega is much higher sharp ratio slightly lower but the
+ returns are much higher so it just gives you a different idea right like it here
+ Omega obviously is a bit more for the returns you know it's it's got a
+ different calculation and you can see that it starts allocating a lot more to
+ Solana Solana is obviously a very very very juicy asset that's gonna give you a
+ lot of money and you can see that the allocation is much higher like I said
+ right now you know the obviously the max drawdown becomes much higher but it's
+ all about how you model it right but again nothing in 2022 that's the one
+ downside of swing trading you could be flat for a whole year so that's the
+ basic thing if this was long so I'm gonna cut it off here and stop rambling
+ but if you have any questions please please please shoot me an answer if
+ people want the notebook ask I try to encourage people to kind of you know try
+ and do this themselves

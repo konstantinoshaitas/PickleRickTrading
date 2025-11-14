@@ -1,0 +1,103 @@
+ Alright welcome back, slide correction. I would like to add a little bit more to the
+ casino factor video and then move on to the analysis of the parameter sensitivity analysis.
+ I wanted to showcase because I found the last metrics to be a little bit of a, you know,
+ it's only one example and they were a little bit mid, so I wanted to show the MacD Notebook.
+ I'm not going to give this one because, well, meaning in download form, maybe later, who
+ knows, but I just want to show you how a different indicator can look, right? Because
+ the performance is very different. You saw here that wind rate was lower and I was drawing
+ examples, right? How some underlying asset can cause, obviously when combined, when
+ assembled, when, you know, having to work together can create disparities in the results.
+ Now, obviously, both will still go by the same casino factor heuristic where you want
+ to be consistently gaining big win consistently taking big winners. Now, this one obviously
+ has a very high wind rate, but is still achieving that. But also honestly, like the results
+ of this bad test are much better. That can be down to being able to narrow down the surge
+ results much more, of course, but also just kind of random luck because again, the principle
+ of what is essentially throwing stuff at the wall and seeing what sticks is still largely
+ there. Obviously, also, there's a smaller amount of trades as you combine them. This
+ changes, of course, because there's more decisions being made all down to final scrutiny in the
+ end, of course, but I wanted to show you how it can differ a lot. I think the average winning
+ percentages aren't changing a lot, but you can see that there are really a big amount
+ of very big winners. The equity curve is still going up evenly very well. And they are doing
+ very well in these scores. Also, I think having both to talk about in the sensitivity analysis
+ is very important. But you can see here that due to the wind rate here being lower and
+ this one being very much higher, that when you have to start diagnosing one from the other
+ and what are the differences that due to this one having a low wind rate and maybe you
+ wanting to be having a more comfortable feeling, trusting your algo and its generalization
+ or ability that you will want a higher wind rate. So that would mean that this one has
+ to go back to production. You have to go and grid search again. Excuse the screaming students
+ outside, by the way, I live in a student city. So if you hear anything in my mic, that is
+ the reason why, but I will try to keep talking so it's not there as much. That this one will
+ have to return to production line because maybe you're not satisfied with that or you will
+ have to use a different indicator, different buying rules, etc. etc. So moving on to the
+ sensitivity analysis. Now, the nature of the sensitivity analysis is that it's a not necessarily
+ performance measure test, but kind of a sanity test where you are going to be looking at,
+ do the results of my back test have crazy differences like in terms of the range, the range that
+ comes from the different surrounding parameters. So let me try to explain that. Right here, you
+ can see, let's see what was the 32, 32, 32, 1494 34. Okay, so in this piece of code, there's
+ a plotting. There's a data frame created plotted that has the neighbors basically, the neighbors of
+ the values like 93, 92, 91, 90 here going up, down, and it's taking all the different combinations.
+ And there's a calculation made again, it's like another back test. But the point of it being
+ that you're basically going to be scanning the environment of data values around this particular
+ best result that you got from the grid search, and you're going to be looking at differences
+ to see if it's overfitting. This is a very important sanity check. I've very seldom seen
+ big red flags from this. I do think you should message me, by the way, to show me these graphs,
+ because it is important, right? Because what can happen, and that's what overfitting is, right?
+ It's that it's tying to data values too perfectly. And this tells you a story about how it generalizes
+ very well. Let's say that if some of these neighbors had sharp ratios differing by like even half,
+ like let's say there was a 0.7 value, it would mean that it's definitely very overfit.
+ This can happen when you want to over optimize or optimize harder, because you could improve,
+ of course, performance by making the training period longer, because it's going to have more
+ examples to train on. But it could happen that that when you start looking at the sensitivity
+ analysis, that the ranges of the neighboring results start differing a lot. And that means
+ it's not generalizing well at all. So if the ranges of these values were very different,
+ like let's say the Sartino was jumpy, it started changing from 2.3 to 1.8 to 1.6,
+ maybe even hitting some minus values, it's definitely overfit. If you think about the picture
+ of overfitting values and how it's like perfectly drawing around certain things, because it knows
+ way too well, and it's basically memorized things way too efficiently, then it's definitely overfitting.
+ Thank God we have a nice plot here that can show you the exact ranges, like min value, max value,
+ standard deviation. This is not overfit at all. The Sartino here definitely not overfit,
+ these are all healthy ranges. Of course, returns are going to be a little bit more jumpy on first
+ look, but they are not differing a lot. These ranges are very tight, so you can say that this
+ one is generalizing very well. But again, if they were very jumpy, meaning if these min values were
+ at like in this case at least 0.3, and this one would be, let's say they're not even balanced,
+ right? Let's say they're not even normally distributing, that would also be a very big red
+ flag. But again, I want you to send me a screenshot of this, because this is a very careful one,
+ and I could see that maybe some people want to make the training period so tight that the
+ sensitivity analysis starts looking funny. So definitely message me with this, and I'll give
+ you my own prognosis on this, because a lot of these soft notches, like deciding on a training
+ period, deciding the sensitivity analysis results and stuff, it's a bit fragile. That's the word
+ I want to use, right? Because yeah, you can improve the performance of your algorithm a lot
+ by optimizing over more examples, meaning lengthening the training period. But yeah, then the fear or
+ the generalizing ability and the fear of overfitting really should increase in your brain. And there's
+ obviously a very fine line between finding that good fit, the good values, the right values,
+ versus overfitting, you know, and you would see that if I increase this training split,
+ the sharp ratio would go up tremendously. If it survives a sensitivity analysis, I think you
+ can do it. But maybe you would have to lengthen the total horizon, right? You would have to make
+ some nudges. But if you want to do this, send me a message and send me the screenshots. It's
+ possible. But I really want to look with you and maybe I'll have to make more videos about that
+ in the future. I probably will, but be very careful there, okay? Both the examples I gave you here
+ are healthy ranges. These are normally distributing very much, you know, like these ranges really
+ aren't that jumpy. If this again was like 0.9 and this was like way closer, it's not normally
+ distributing. It means that it's way too sensitive. It's definitely overfitting some of the neighboring
+ values, meaning that your particular combination is just too specific. Like if it's too good to be
+ true, no free lunch theorem, if it's just too suspect, you know, if it's, you know, if it's a
+ mogus, blah, blah, blah, it will probably be really that, you know, you really want to prioritize
+ robustness because you're already going to be outperforming markets severely with this method.
+ And yeah, you can gain more money, but please, you know, don't assume free lunch exists. That's
+ again, like a good example would also be like if trades differ a lot, like that's also a very
+ big red flag, but these ranges are very healthy here. And I don't think there's anything to really
+ be fearful about. Let me scroll down a little bit. Show the trades on the bottom as well.
+ Like these don't differ a lot, right? But if there's just these jumps, like you could even chart,
+ plot maybe some charts here. If there's serious differences, again, send me a message. But if
+ they are there, maybe change the split around a little bit, you know, maybe grid search a little
+ bit wider, so that the parameters are not that specific, make screenshots, save it, put it in
+ Excel, I don't know, save the notebook, compare them, you know, use this little side view mirror,
+ little thing here, you know, start comparing them, and be careful, because it can really,
+ it can bite hard. And that's why I keep repeating that, but you really don't, you don't, you don't
+ want to be the guy that's overfitting really. Robustness is important. It's possible again,
+ you can gain a little bit, but again, if you're outperforming so hard, why would you want to try
+ and push the limits, you know, like magic can blow up, you know, if you watch the
+ the movie, the like magic beasts and where to find them, you know, that guy that explodes with
+ his magic, I don't know, you don't want to be that guy. You don't want to be the guy blowing up with
+ his own magic, you know, you don't want to be like combustion man, avatar, you want to watch out,
+ man, just come on, Morty, watch out. All right, I think this is the last video at least for now for

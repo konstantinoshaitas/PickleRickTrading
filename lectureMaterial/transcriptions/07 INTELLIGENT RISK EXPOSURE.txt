@@ -1,0 +1,228 @@
+ Hello and welcome to my first personal Rick theory video. There's multiple of them
+ but this one truly is like a word or something that I made up okay. This paper
+ I've been referring to it and on YouTube earlier in the course it's it's
+ something I sent to people when they're new to algorithmic trading because for
+ me this paper really shows how effective certain how do you say it technical
+ indicators really are how simple they can be how effective they are it's
+ actually you know breaking down the market with simple timing you know like
+ buy above sell below because that's what this paper really does and it does it so
+ perfectly over a hundred years back test I mean almost right like 92 blah blah
+ blah blah right and 2025 I've tested it myself it looks about the same but the
+ basic premise that I find reading this and obviously you should but and what
+ fascinates me is the fact that basically a lot of these boomer sayings that
+ you cannot time the market they are wrong you know but to be fair the trend
+ is your friend it kind of is right until it's not okay so time it okay but it
+ lays bare such a powerful amazing thing that is called you know trend
+ following of course but it's the one that also this is displayed very well in
+ this paper and that is that the volatility in downtrends is much shock
+ here than it is in uptrends right okay let me remove these wrongs okay so to
+ show you what I mean right like because in the chart and to have a feeling for it
+ and and you know because I can tell you wanting one time in the videos and as
+ short as I'm trying and you know as you go on and follow me on the journey of
+ creation creating the first quant portfolio for you and investing in that
+ for your lifetime is that as you revisit topics you kind of build your
+ relationship with them right like you get a deeper understanding of them yada
+ yada yada you can read the same book every year you're gonna understand it
+ better and I really believe in something called like there's risk-taking
+ there's risk reduction but then I also believe there's like intelligent timing
+ of risk to explain that you have to kind of look at this chart and then also
+ realize like how smooth this looks and how choppy this looks right like I'm
+ trying to kind of draw softly but like you can see how choppy all those down
+ movements are and that's because here under the 200 and under the 150 how well
+ they are you know deciding these regimes these trends you can see that the
+ volatility is much higher right so imagine and that's that's what I'm
+ trying to say right is that intelligent risk exposure exists and that's
+ something I build on right like you want to be intelligently exposing yourself
+ to upsides of market with low volatility because the trend or at least how do
+ you say the characteristics of a healthy trend are low volatility up trend
+ meaning markets going up because that's also displayed in a bull bear cycles
+ market it's it's also stocks it's displayed in these charts right like the
+ market tends to go up there is a left screw of the normal distribution right
+ markets tend to go up it's why I think the method that I'm giving you is very
+ quantum mental meaning you can stock pick personally and it's going to work for
+ the same reasons why buy and hold buy and hold of the S&P works like the market
+ tends to go up except this method allows you to time it in a robust
+ intelligent fashion and perhaps even leverage on parts of the market that
+ are better for it right like because that's the exact point of it it's why I
+ have the triple Nasdaq right here it's because of this paper if you can somehow
+ cut out that ugly downside and be in a low volatility uptrend with strong
+ momentum right and there's going to be more parts coming up where you can also
+ like build relativity factor models to you know filter through there's more
+ papers of that there's going to be infinite content on this in this school
+ anyway but if you can expose yourself to all of these smooth periods in the best
+ way possible and have long exposure to them it starts justifying the use of
+ leverage it starts justifying that you could model high beta asset meaning
+ something higher than the beta one coming from the S&P and only exposing
+ yourself to the upside of them which only magnifies your your returns in
+ magnitude the one most damning statistic in this whole paper is the one where it
+ still maintains this 92 year back test but instead of like this one where it's
+ the S&P 500 times 3 and the fucking liquidation rate of like happened happens
+ and will happen like it's guaranteed is the one where they're using the 200 ma
+ to cycle in and out which is here right the S&P 500 3x 200 day leverage rotation
+ where the max drawdown is only 51% compared to the one where their triple
+ leveraged here but almost getting killed or double except here they're
+ rotating and it becomes lower than a double one so you could literally take
+ the assumption from this it's a 92 year back test so this is not overfit it's
+ robust it could work all the time anyone can run this you don't need to code for
+ it you can just set an alert from Tradingview it quiet literally in its
+ fundamentals and it's not like the best-sided paper but who is going to
+ argue a 292 year back test you can't do it right this is one of the easiest ways
+ that you can expose yourself to these extremely high beta strategies but
+ still be you know surviving and living to tell the tale and you will have gained
+ more money because newsflash the volatility also just stays right around
+ the same and the annual return is 40 24.2 and then when you have a strategy
+ that is is so good that it reduces the risk so much better than the 200 ma
+ because you're building on strong data scientific principles that are you know
+ robust enough where even if I start adding in like let's say because the
+ trading period like we have this discuss right it's 2018 2022 I start adding
+ boom this period here the decay as you see here it's barely there yes trading
+ view calculates differently but the sharp ratio Sortino they barely change I
+ just added eight years out of sample they are not decaying this proves the
+ methods that I'm giving you are so robust that it basically becomes as
+ effective and robust and non-overfit as this 200 ma but still will allow you to
+ triple leverage things right if you look at the returns of this look at it it's
+ 4.7 22% with a max drawdown of 35 that's a back test of 15 years mind you that
+ is extremely significant that is super high right this buying hold return is
+ quite ridiculous too but the drawdowns are so much lower trust me you do not
+ want to sit through those drawdowns I actually think that if I because that's
+ a bit of a faulty statistics there I think does this one go back to just
+ right about let me see right yeah this one does go back to that that metric
+ right so let me see right like let's let's test that because that one was
+ trying to suggest that the strategy would not outperform but if you then
+ expose yourself to a major crash like 2008 2020 here do you see how nicely it
+ exits because a 200 a man I've tested this many times it does survive these
+ drops right because it's so well you know accustomed to exit trends right as
+ they happen right I'm scrolling past it never mind okay look it exits in 2008
+ to and this is totally out of sample here I mean I mean here but so even in
+ these flash crashes it's it's surviving right so you can survive long enough over
+ these periods and still have like such strong draw drawdowns max equity drawdown
+ and you can expose yourself to them and it's so strong and it justifies the use
+ of leverage on them by the way this is an unleveraged product the debt on the
+ TQQ is not strong but okay look so my point is it exits so strongly and then
+ when you you know apply a similar methodology you can recreate this and
+ then when you start once you start mixing in like different assets because what I
+ said right it's also you can how do you put it you have different assets that
+ you can expose yourself to like in a fundamental sense right like because
+ what you're doing really is just hedging yourself from downside and you could
+ leverage yourself into upside magnifying returns on those healthy trends like the
+ the positive momentum preferably higher up momentum uptrend and low volatility
+ now then what you get when you never you know a set of side the fundamental
+ analysis side of things is that you can start diversifying over assets which is
+ something that will also be covered soon enough in this school course which is to
+ start mixing in things like BTC you start mixing in the TQQ you start mixing
+ in something like Apple you start looking for assets that are still you know
+ have enough beta but are in different industries like maybe a 3x gold or 3x
+ Dow Jones industrial average these are just examples because they obviously
+ have to become modeled and I'm going to start modeling them and I'm going to be
+ displaying that with you right like because the idea here is for you to
+ start creating a portfolio kind of with me maybe become better than me me to
+ help you blah blah blah blah all idealistic and cool and stuff right we
+ all want to buy a house we have a tough economy nowadays right but as you take
+ that and you you have these these assets you have one two three four because
+ there's also a lot of fundamental analysis like traditional finance that
+ a lot of people don't know right you have portfolio management theory where
+ often they'll have an asset they'll buy and hold them but they want the returns
+ to be uncorrelated let's say this asset gains like this this one is like quite a
+ reverse right this one gains like this this one is like kind of really weird
+ like this and did it it and we give them like correlation scores like this one
+ and you're gonna be comparing all of their correlation scores this one has
+ 0.4 this one might have like 0.8 this one might have 0.2 this one will have a
+ correlation score of 0.8 so it's incomplete reverse and this one let's
+ say minus 0.6 now an asset that has extremely high correlation to all and
+ this is of course not a real example but something with high correlation to
+ everyone is the least preferred asset for you to hold something with a super
+ low like a negative correlation to everything is something you can offset
+ right like if you hold all tech and tech goes down that means your whole
+ portfolio goes down if you're holding an uncorrelated portfolio then you can
+ balance that out right it's more likely for you to break even at the end of the
+ day of like a big swing on the market now let's let's add more more components
+ on top of that right you you build preferably a portfolio that mostly
+ consists of assets that are very negative like this or at least the lowest
+ correlation desirable so usually they would do this with buy and hold assets
+ you know though what you can also start doing is to deploy simple algos on right
+ so you can start having the return curves from the buy and hold measure the
+ correlation but then also start adjusting them with you know certain buy and
+ sell points like here here here and here right and these get their own return
+ curves now this adds diversification on diversification and also much like the
+ ensembles where the TI's the TAs right were correcting each other signals if
+ there was a false or delayed signal now strategy one will be correcting
+ downturns with strategy two so together then you can be more likely to break
+ even or gain more money as long as you can pick that asset which is also why I
+ was trying to kind of give you that soft intuition for spotting good assets to
+ hold right and there are infinite assets to find right so that's something that
+ I'm also going to probably do more longer form videos on but you know this is
+ the bootcamp this is the get yourself in my brain part of all this but once you
+ you you you get enough understanding of my weird brain we can start using your
+ weird brain and we might be able to pick some crazy stuff right like let's see
+ this one this is the website fun egg fun egg has basically financial analysts
+ employed from Amsterdam because they are a Dutch company and also in New York
+ they have all these cool ETFs right they have these cool strategies you have
+ dividend mining China rare earth materials high as region semiconductor
+ yada yada yada right like they're quite famous for some of these ETFs but let's
+ say we want something with high returns because we are young and we want to have
+ a family and stuff and we want to buy a house and we are in a tough economy higher
+ risk asset can scroll down I believe they have an overview of their teams usually
+ okay it's not important right now why invest wait okay no never mind okay no no
+ I was on such a good flow talking there wait give me a second guys ETF
+ overview this this page is a little bit different than the other ones okay so
+ let's say we have semi conductors because I know this page is more common than
+ the ones I've worked out so you can see somewhere they have holdings fund page
+ yeah okay that's what I was looking for so what they have okay here they have the
+ holdings right so this is still tech but wait I can actually investment ideas
+ strategies quantum you have to go to the front page apparently just bear with me
+ as I'm booming around hello fun page did they make this one already please
+ investment ideas okay whatever real estate income portfolio for man this is
+ annoying what is this trying to be smooth here come on okay so let's pretend
+ that this is not tech for a second right like let's suppose this is electronics
+ financials maybe they do have this fine asset classes thematic investment teams
+ financials fallen angels Europe okay genomics that's that's a nice one but
+ what a love of God man give me the fucking holdings come on it's not so
+ here we go fund page my god okay so finally medical robotics and
+ bionic engineering so that's clearly something different than tech right so
+ where I was talking about you having to have some other uncorrelated assets that
+ will break even you start getting into the territory of different sectors right
+ so you can start looking at different ETF websites like product offers like fun
+ egg or direction of course there's an investment goal there's wisdom tree
+ wisdom tree is also very good actually wisdom tree ETFs they are very alright
+ they have a cyber security ETF which is still tech of course but the the correlation from
+ main tech like big big big tech like apple microsoft is still going to be big
+ enough to the point where I would deem them to be modelable and still have
+ strong trends because that's kind of what they are as you can see here they have
+ a lot so that's also like an option to go by when I make this post I'll be sure
+ to like kind of like start assembling some websites that are cool to like pick
+ assets from right but as you start modeling and stacking these different
+ diversifications everything becomes more robust right so the point of these
+ ETF websites is not necessarily to model the ETF but find the underlying
+ companies right because then when tech goes bad we might want to be holding a
+ company like metronik intuitive surgical striker at work at words life
+ sciences model these and then have consistent strategies that are not
+ overfit robust workout of sample but also in their underlying patterns of
+ price are strong if you have those with high potential that are fundamentally
+ sound right because if you pick them from fun egg or wisdom tree why are they
+ good they're good because they've already been pre-picked by career
+ professionals we're just adding a little bit of flavor on top like nothing here
+ I'm saying is crazy it's just kind of like a strong plagiarization of it you
+ know like why fix the wheel if it wasn't broken in the first place that's kind of
+ what I'm getting at right like maybe if I look at this one asset it's actually
+ quite interesting to look at metronik now okay this one would require some
+ interesting modeling it's been a bit wild but I think yeah maybe with an RSI
+ something mean reverting it could be doable right but if you keep stock
+ picking across this you find things that are close enough maybe in sub sectors of
+ tech because tech does tend to rise very nicely right you could also like
+ consider maybe more mature companies like let's say coca-cola the company the
+ problem with coca-cola though is that they're a very mature stock and the
+ the return would be like lower so that would be like less ideal in some cases
+ I think is this right okay it does have a very healthy trend for a few years this
+ is a crazy opening by the way but yeah this something you could leverage kind
+ of right like if you could and it depends on your broker your region I know
+ that a lot of guys are also Indian you know so I've heard that in India you
+ often can only trade the Indian assets so they are really going to have to find
+ the underlying 50 find the highest beta ones find the ones that have these healthy
+ curves and I do believe that the nifty actually has a very high potential to be
+ modeled it has very strong trends actually yeah I think the nifty maybe maybe a
+ liver leveraged version of the nifty exists because obviously the way I'm
+ putting it up right now there's a lot of like American aspects to it I might be
+ molding Apple soon right but let's say the the the docs you know like Germany
+ Deutschland maybe this is a strong option given the trends are pretty good I think
+ I can Europe has a stagnant nature and I would agree I think here but let's say
+ China maybe the China a 50 okay that's also a little bit crazy but that's how
