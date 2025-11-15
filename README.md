@@ -1,6 +1,6 @@
-# PickleRick Trading – Simple Triple EMA Backbone
+# PickleRick Trading 
 
-This is a trimmed-down Python scaffold that mirrors the Triple EMA notebook (`Template-3EMA.ipynb`) without the notebook sprawl. Everything lives in a handful of modules so you can read, tweak, and extend the workflow quickly.
+This is a trimmed-down Python scaffold that mirrors the Triple EMA notebook (`Template-3EMA.ipynb`) workflow. Everything lives in a handful of modules so you can read, tweak, and extend the workflow quickly.
 
 ## Layout
 
@@ -25,7 +25,7 @@ PickleRickTrading/
 2. Update `config/default.yml` with your ticker/date/EMA settings.
 3. Use the CLI subcommands:
    - `python main.py fetch` – download/cache the OHLCV data.
-   - `python main.py backtest` – run the configured Triple EMA split into train/validation with a buy & hold baseline.
+   - `python main.py backtest` – run the configured strategy over the train and validation period and compare with a buy & hold baseline.
    - `python main.py grid` – brute-force the EMA ranges defined in the YAML and (optionally) save results to `data/grid_results.csv`.
    - Add `--config path/to.yml` to point at a different configuration file. Use `--refresh` on `backtest`/`grid` if you need to refetch data, and `--force` on `fetch` to ignore cached CSVs.
 
@@ -44,4 +44,4 @@ Each subcommand uses the same YAML file, so you can mix/match: fetch once, grid-
 - Point `local_csv` at curated datasets or expand the fetcher to include cleaning steps.
 - Notebook/IDE workflows can import the same functions from `backtesting.pipeline` to execute individual stages (fetch only, backtest only, etc.) without notebooks.
 
-It’s intentionally minimal so you can iterate in the notebook, move logic to Python when it stabilizes, and keep both views aligned. Happy testing!
+
