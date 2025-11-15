@@ -1,21 +1,21 @@
 data:
-  ticker: BTC-USD
-  start: '2018-01-01'
+  ticker: AAPL
+  start: '2012-01-01'
   end:
   interval: 1d
   local_csv:
-  cache_csv: data/cache/BTC-USD_1d.csv
+  cache_csv: data/cache/AAPL_1D.csv
 
 strategy:
   name: triple_ema
   params:
-    ema_fast: 9
-    ema_mid: 65
-    ema_slow: 135
+    ema_fast: 4
+    ema_mid: 50
+    ema_slow: 100
   grid:
-    ema_fast: [10, 15, 20, 25]
-    ema_mid: [40, 50, 60, 70]
-    ema_slow: [120, 160, 200, 240]
+    ema_fast: [4, 15, 25, 40]
+    ema_mid: [50, 60, 70, 80, 90]
+    ema_slow: [100, 150, 200, 240]
 
 backtest:
   init_cash: 100000

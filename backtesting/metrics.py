@@ -16,17 +16,13 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     # Portfolio metrics
     metrics = {
         "total_return": total_return,
+        "annualized_return": float(portfolio.annualized_return(freq=freq)),
         "sharpe_ratio": float(portfolio.sharpe_ratio(freq=freq)),
         "sortino_ratio": float(portfolio.sortino_ratio(freq=freq)),
         "max_drawdown": float(portfolio.max_drawdown()),
         "volatility": float(portfolio.annualized_volatility(freq=freq)),
         "total_trades": int(portfolio.trades.count()),
     }
-    
-    # Annualized return
-    ann_return = _annualized_return(total_return, close.index)
-    if ann_return is not None:
-        metrics["annualized_return"] = ann_return
     
     # Trade metrics (matching notebook logic)
     trades = portfolio.trades
@@ -77,13 +73,3 @@ def buy_and_hold(close: pd.Series, config) -> Dict[str, float]:
         freq=config.freq,
     )
     return compute_metrics(portfolio, close, config.freq)
-
-
-def _annualized_return(total_return: float, index: pd.Index) -> float | None:
-    if not isinstance(index, pd.DatetimeIndex) or len(index) < 2:
-        return None
-    delta = index[-1] - index[0]
-    years = delta.total_seconds() / (365.25 * 24 * 3600)
-    if years <= 0:
-        return None
-    return float((1 + total_return) ** (1 / years) - 1)
