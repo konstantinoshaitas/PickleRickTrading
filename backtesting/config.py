@@ -27,9 +27,9 @@ class StrategyConfig:
     )
     grid: Dict[str, List[int]] = field(
         default_factory=lambda: {
-            "ema_fast": list(range(5, 35, 5)),
-            "ema_mid": list(range(30, 100, 10)),
-            "ema_slow": list(range(100, 260, 20)),
+            "ema_fast": list[int](range(5, 35, 5)),
+            "ema_mid": list[int](range(30, 100, 10)),
+            "ema_slow": list[int](range(100, 260, 20)),
         }
     )
 

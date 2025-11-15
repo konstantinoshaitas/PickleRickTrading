@@ -1,21 +1,21 @@
 data:
   ticker: AAPL
-  start: '2012-01-01'
+  start: '2014-01-01'
   end:
   interval: 1d
   local_csv:
   cache_csv: data/cache/AAPL_1D.csv
 
 strategy:
-  name: triple_ema
+  name: triple_macd
   params:
-    ema_fast: 4
-    ema_mid: 50
-    ema_slow: 100
+    fastperiod: 12
+    slowperiod: 26
+    signalperiod: 9
   grid:
-    ema_fast: [4, 15, 25, 40]
-    ema_mid: [50, 60, 70, 80, 90]
-    ema_slow: [100, 150, 200, 240]
+    fastperiod: [12, 20, 26, 32, 40]
+    slowperiod: [26, 30, 40, 50, 60, 70, 80]
+    signalperiod: [9, 12, 18, 26, 50, 94]
 
 backtest:
   init_cash: 100000
