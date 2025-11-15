@@ -1,4 +1,4 @@
-"""Minimal backtesting toolkit built for the Triple EMA notebook workflow."""
+"""Minimal backtesting toolkit built"""
 
 from .config import BacktestConfig, DataConfig, StrategyConfig, WorkflowConfig, load_config
 from .data import DataFetcher, split_train_val
@@ -9,7 +9,12 @@ from .pipeline import (
     run_single_backtest,
     save_grid_results,
 )
-from .strategies import StrategyFactory, TripleEMAStrategy
+from .strategies import (
+    EnsembleStrategy,
+    StrategyFactory,
+    TripleEMAStrategy,
+    TripleMACDStrategy,
+)
 
 __all__ = [
     "BacktestConfig",
@@ -22,6 +27,8 @@ __all__ = [
     "buy_and_hold",
     "StrategyFactory",
     "TripleEMAStrategy",
+    "TripleMACDStrategy",
+    "EnsembleStrategy",
     "load_prices",
     "run_single_backtest",
     "run_grid_search",

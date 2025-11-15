@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -34,22 +35,68 @@ class DataFetcher:
             elif self.cache_csv and self.cache_csv.exists():
                 self.data = self._read_csv(self.cache_csv)
         if self.data is None or self.data.empty:
-            self.data = yf.download(
-                self.ticker,
-                start=self.start,
-                end=self.end,
-                interval=self.interval,
-                group_by="column",
-                progress=False,
-            )
-            if self.cache_csv:
+            self.data = self._download_with_retry()
+            if self.cache_csv and not self.data.empty:
                 self.cache_csv.parent.mkdir(parents=True, exist_ok=True)
                 self.data.to_csv(self.cache_csv)
         self._normalize_frame()
         self._apply_date_window()
         if self.data.empty:
-            raise ValueError("No data found for given parameters.")
+            raise ValueError(
+                f"No data found for ticker '{self.ticker}' with parameters "
+                f"(start={self.start}, end={self.end}, interval={self.interval}). "
+                "This could be due to: network issues, yfinance API problems, "
+                "or invalid ticker/date range."
+            )
         return self.data
+    
+    def _download_with_retry(self, max_retries: int = 3) -> pd.DataFrame:
+        """Download data with retry logic to handle yfinance API issues."""
+        for attempt in range(max_retries):
+            try:
+                # Try method 1: Using Ticker.history() directly (skip .info to avoid rate limit)
+                # This avoids the 429 error from accessing ticker.info
+                ticker_obj = yf.Ticker(self.ticker)
+                hist = ticker_obj.history(
+                    start=self.start,
+                    end=self.end,
+                    interval=self.interval,
+                    auto_adjust=True,
+                )
+                if hist is not None and not hist.empty:
+                    return hist
+                
+                # Try method 2: Standard download (fallback)
+                data = yf.download(
+                    self.ticker,
+                    start=self.start,
+                    end=self.end,
+                    interval=self.interval,
+                    progress=False,
+                    show_errors=False,
+                )
+                
+                # Check if download was successful
+                if data is not None and not data.empty:
+                    return data
+                    
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for rate limiting (429 or "too many requests")
+                if "429" in error_str or "too many requests" in error_str:
+                    wait_time = 60 * (attempt + 1)  # Wait 1min, 2min, 3min for rate limits
+                    print(f"⚠️  Rate limited by Yahoo Finance API. Waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                    print("   (This happens when making too many requests. Consider using cached data.)")
+                    time.sleep(wait_time)
+                elif attempt < max_retries - 1:
+                    wait_time = 5 * (attempt + 1)  # 5s, 10s, 15s for other errors
+                    print(f"Download attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"All {max_retries} download attempts failed. Last error: {e}")
+        
+        # Return empty DataFrame if all attempts failed
+        return pd.DataFrame()
     
     def _read_csv(self, path: Path) -> pd.DataFrame:
         return pd.read_csv(path, index_col=0)
