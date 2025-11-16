@@ -66,11 +66,23 @@ def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path):
     if df.empty:
         print("Grid search produced no valid results.")
         return
-    df = df.sort_values(cfg.grid.metric, ascending=False)
+    
+    # Sort by configured metric (default: sharpe_ratio)
+    sort_metric = cfg.grid.metric
+    if sort_metric in df.columns:
+        df = df.sort_values(sort_metric, ascending=False)
+    else:
+        # Fallback to first available metric
+        metric_cols = [c for c in df.columns if c not in ['ema_fast', 'ema_mid', 'ema_slow', 
+                                                          'fastperiod', 'slowperiod', 'signalperiod']]
+        if metric_cols:
+            sort_metric = metric_cols[0]
+            df = df.sort_values(sort_metric, ascending=False)
+    
     print(df.head(top).to_string(index=False))
     if output:
-        save_grid_results(search, output)
-        print(f"\nSaved full results to {output}")
+        save_grid_results(search, output, sort_by=sort_metric)
+        print(f"\nSaved full results to {output} (sorted by {sort_metric})")
 
 
 def _print_metrics(metrics: dict):

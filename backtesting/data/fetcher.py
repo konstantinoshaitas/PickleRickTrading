@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
+import requests
 import yfinance as yf
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class DataFetcher:
@@ -17,6 +23,7 @@ class DataFetcher:
         start: str,
         end: Optional[str] = None,
         interval: str = "1d",
+        data_source: str = "yfinance",
         local_csv: Optional[str] = None,
         cache_csv: Optional[str] = None,
     ):
@@ -24,6 +31,7 @@ class DataFetcher:
         self.start = start
         self.end = end
         self.interval = interval
+        self.data_source = data_source.lower()
         self.local_csv = Path(local_csv) if local_csv else None
         self.cache_csv = Path(cache_csv) if cache_csv else None
         self.data: Optional[pd.DataFrame] = None
@@ -44,14 +52,22 @@ class DataFetcher:
         if self.data.empty:
             raise ValueError(
                 f"No data found for ticker '{self.ticker}' with parameters "
-                f"(start={self.start}, end={self.end}, interval={self.interval}). "
-                "This could be due to: network issues, yfinance API problems, "
+                f"(start={self.start}, end={self.end}, interval={self.interval}, "
+                f"source={self.data_source}). "
+                "This could be due to: network issues, API problems, "
                 "or invalid ticker/date range."
             )
         return self.data
     
     def _download_with_retry(self, max_retries: int = 3) -> pd.DataFrame:
-        """Download data with retry logic to handle yfinance API issues."""
+        """Download data with retry logic based on selected data source."""
+        if self.data_source == "alphavantage":
+            return self._download_alphavantage(max_retries)
+        else:  # default to yfinance
+            return self._download_yfinance(max_retries)
+    
+    def _download_yfinance(self, max_retries: int = 3) -> pd.DataFrame:
+        """Download data from yfinance with retry logic."""
         for attempt in range(max_retries):
             try:
                 # Try method 1: Using Ticker.history() directly (skip .info to avoid rate limit)
@@ -94,6 +110,112 @@ class DataFetcher:
                     time.sleep(wait_time)
                 else:
                     print(f"All {max_retries} download attempts failed. Last error: {e}")
+        
+        # Return empty DataFrame if all attempts failed
+        return pd.DataFrame()
+    
+    def _download_alphavantage(self, max_retries: int = 3) -> pd.DataFrame:
+        """Download data from Alpha Vantage API."""
+        api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "ALPHAVANTAGE_API_KEY not found in environment variables. "
+                "Please set it in your .env file or export it as an environment variable."
+            )
+        
+        # Alpha Vantage only supports daily intervals for TIME_SERIES_DAILY_ADJUSTED
+        if self.interval != "1d":
+            raise ValueError(
+                f"Alpha Vantage TIME_SERIES_DAILY_ADJUSTED only supports daily (1d) intervals. "
+                f"Requested interval: {self.interval}"
+            )
+        
+        base_url = "https://www.alphavantage.co/query"
+        
+        for attempt in range(max_retries):
+            try:
+                params = {
+                    "function": "TIME_SERIES_DAILY_ADJUSTED",
+                    "symbol": self.ticker,
+                    "apikey": api_key,
+                    "outputsize": "full",  # Get full historical data
+                    "datatype": "json",
+                }
+                
+                response = requests.get(base_url, params=params, timeout=30)
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                # Check for API errors
+                if "Error Message" in data:
+                    raise ValueError(f"Alpha Vantage API error: {data['Error Message']}")
+                if "Note" in data:
+                    raise ValueError(f"Alpha Vantage API rate limit: {data['Note']}")
+                if "Information" in data:
+                    raise ValueError(f"Alpha Vantage API info: {data['Information']}")
+                
+                # Extract time series data
+                if "Time Series (Daily)" not in data:
+                    raise ValueError(f"Unexpected Alpha Vantage response format. Keys: {list(data.keys())}")
+                
+                time_series = data["Time Series (Daily)"]
+                if not time_series:
+                    raise ValueError("No time series data returned from Alpha Vantage")
+                
+                # Convert to DataFrame
+                df = pd.DataFrame.from_dict(time_series, orient="index")
+                df.index = pd.to_datetime(df.index)
+                df.index.name = "Date"
+                
+                # Map Alpha Vantage columns to standard format
+                # Alpha Vantage uses: 1. open, 2. high, 3. low, 4. close, 5. adjusted close, 6. volume, 7. dividend amount, 8. split coefficient
+                df = df.rename(columns={
+                    "1. open": "Open",
+                    "2. high": "High",
+                    "3. low": "Low",
+                    "4. close": "Close",  # Raw close (we'll use adjusted)
+                    "5. adjusted close": "Adj Close",
+                    "6. volume": "Volume",
+                })
+                
+                # Use adjusted close as Close (matching yfinance auto_adjust=True behavior)
+                df["Close"] = pd.to_numeric(df["Adj Close"], errors="coerce")
+                
+                # Convert other columns to numeric
+                for col in ["Open", "High", "Low", "Volume"]:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                
+                # Select only the columns we need (matching yfinance format)
+                df = df[["Open", "High", "Low", "Close", "Volume"]]
+                
+                # Sort by date (ascending)
+                df = df.sort_index()
+                
+                # Filter by date range if specified
+                if self.start:
+                    start_ts = pd.to_datetime(self.start)
+                    df = df[df.index >= start_ts]
+                if self.end:
+                    end_ts = pd.to_datetime(self.end)
+                    df = df[df.index <= end_ts]
+                
+                if df.empty:
+                    raise ValueError("No data in specified date range")
+                
+                return df
+                
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    wait_time = 5 * (attempt + 1)  # 5s, 10s, 15s
+                    print(f"Alpha Vantage download attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"All {max_retries} Alpha Vantage download attempts failed. Last error: {e}")
+            except Exception as e:
+                # For non-network errors, don't retry
+                print(f"Alpha Vantage download failed: {e}")
+                break
         
         # Return empty DataFrame if all attempts failed
         return pd.DataFrame()
