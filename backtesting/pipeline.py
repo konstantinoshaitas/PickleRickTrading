@@ -22,6 +22,7 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
         start=cfg.data.start,
         end=cfg.data.end,
         interval=cfg.data.interval,
+        data_source=cfg.data.data_source,
         local_csv=cfg.data.local_csv,
         cache_csv=cfg.data.cache_csv,
     )
@@ -68,11 +69,29 @@ def run_grid_search(cfg: WorkflowConfig, close: pd.Series):
     return search
 
 
-def save_grid_results(search: GridSearch, path: Path):
-    """Persist grid search results to CSV."""
+def save_grid_results(search: GridSearch, path: Path, sort_by: str = "sharpe_ratio", ascending: bool = False):
+    """Persist grid search results to CSV, sorted by specified metric.
+    
+    Args:
+        search: GridSearch instance with results
+        path: Output file path
+        sort_by: Metric to sort by (default: "sharpe_ratio")
+        ascending: Sort order (default: False = descending)
+    """
     if not search.results:
         raise ValueError("No grid results to save.")
     df = pd.DataFrame(search.results)
+    
+    # Sort by specified metric if it exists
+    if sort_by in df.columns:
+        df = df.sort_values(sort_by, ascending=ascending)
+    else:
+        # Fallback to first available metric if sort_by not found
+        metric_cols = [c for c in df.columns if c not in ['ema_fast', 'ema_mid', 'ema_slow', 
+                                                          'fastperiod', 'slowperiod', 'signalperiod']]
+        if metric_cols:
+            df = df.sort_values(metric_cols[0], ascending=ascending)
+    
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
     return path

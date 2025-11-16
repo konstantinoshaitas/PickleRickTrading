@@ -54,14 +54,15 @@ class TripleMACDStrategy:
         
         # Generate crossover signals
         # Entry: MACD crosses above Signal (bullish momentum)
-        entries_raw = macd_series.vbt.crossed_above(signal_series).reindex(close.index).fillna(False)
+        entries_raw = macd_series.vbt.crossed_above(signal_series).reindex(close.index)
         
         # Exit: MACD crosses below Signal (bearish momentum)
-        exits_raw = macd_series.vbt.crossed_below(signal_series).reindex(close.index).fillna(False)
+        exits_raw = macd_series.vbt.crossed_below(signal_series).reindex(close.index)
         
         # Shift and fix lookahead bias (matches notebook pattern)
-        entries = entries_raw.shift(1).fillna(False)
-        exits = exits_raw.shift(1).fillna(False)
+        # Fill NaN values and convert to bool (using infer_objects to avoid FutureWarning)
+        entries = entries_raw.shift(1).fillna(False).infer_objects(copy=False).astype(bool)
+        exits = exits_raw.shift(1).fillna(False).infer_objects(copy=False).astype(bool)
         
         return entries, exits
     

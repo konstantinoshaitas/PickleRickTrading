@@ -15,6 +15,7 @@ class DataConfig:
     start: str = "2018-01-01"
     end: Optional[str] = None
     interval: str = "1d"
+    data_source: str = "yfinance"  # Options: "yfinance" or "alphavantage"
     local_csv: Optional[str] = None
     cache_csv: Optional[str] = "data/cache.csv"
 

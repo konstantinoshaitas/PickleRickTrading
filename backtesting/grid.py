@@ -22,8 +22,12 @@ class GridSearch:
         for combo in itertools.product(*[grid[k] for k in keys]):
             params = dict(base_params)
             params.update(dict(zip(keys, combo)))
-            if not (params["ema_fast"] < params["ema_mid"] < params["ema_slow"]):
+            
+            # Strategy-agnostic parameter validation
+            # Skip invalid parameter combinations
+            if not self._validate_params(params):
                 continue
+            
             strat = self.strategy_cls(**params)
             entries, exits = strat.generate_signals(close)
             portfolio = self.engine.run(close, (entries, exits))
@@ -31,6 +35,26 @@ class GridSearch:
             metrics.update(params)
             self.results.append(metrics)
         return self.results
+    
+    def _validate_params(self, params: Dict[str, int]) -> bool:
+        """Validate parameter combinations based on strategy type.
+        
+        Returns True if parameters are valid, False otherwise.
+        """
+        # Triple EMA validation: ema_fast < ema_mid < ema_slow
+        if "ema_fast" in params and "ema_mid" in params and "ema_slow" in params:
+            if not (params["ema_fast"] < params["ema_mid"] < params["ema_slow"]):
+                return False
+        
+        # MACD validation: fastperiod < slowperiod
+        if "fastperiod" in params and "slowperiod" in params:
+            if not (params["fastperiod"] < params["slowperiod"]):
+                return False
+        
+        # Ensemble validation: both EMA and MACD constraints must be satisfied
+        # (handled by the checks above)
+        
+        return True
     
     def best(self, metric: str):
         if not self.results:

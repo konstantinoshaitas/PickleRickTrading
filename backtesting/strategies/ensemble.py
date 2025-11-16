@@ -32,16 +32,16 @@ class EnsembleStrategy:
         ema_fast: Fast EMA period for Triple EMA strategy
         ema_mid: Medium EMA period for Triple EMA strategy
         ema_slow: Slow EMA period for Triple EMA strategy
-        macd_fastperiod: Fast EMA period for MACD
-        macd_slowperiod: Slow EMA period for MACD
-        macd_signalperiod: Signal line EMA period for MACD
+        fastperiod: Fast EMA period for MACD (same as triple_macd)
+        slowperiod: Slow EMA period for MACD (same as triple_macd)
+        signalperiod: Signal line EMA period for MACD (same as triple_macd)
     """
     ema_fast: int
     ema_mid: int
     ema_slow: int
-    macd_fastperiod: int
-    macd_slowperiod: int
-    macd_signalperiod: int
+    fastperiod: int
+    slowperiod: int
+    signalperiod: int
     
     def generate_signals(self, close: pd.Series) -> Tuple[pd.Series, pd.Series]:
         """Generate ensemble signals by combining EMA and MACD with OR logic.
@@ -64,9 +64,9 @@ class EnsembleStrategy:
         ema_entries, ema_exits = ema_strategy.generate_signals(close)
         
         macd_strategy = TripleMACDStrategy(
-            fastperiod=self.macd_fastperiod,
-            slowperiod=self.macd_slowperiod,
-            signalperiod=self.macd_signalperiod
+            fastperiod=self.fastperiod,
+            slowperiod=self.slowperiod,
+            signalperiod=self.signalperiod
         )
         macd_entries, macd_exits = macd_strategy.generate_signals(close)
         
@@ -84,8 +84,8 @@ class EnsembleStrategy:
             "ema_fast": self.ema_fast,
             "ema_mid": self.ema_mid,
             "ema_slow": self.ema_slow,
-            "macd_fastperiod": self.macd_fastperiod,
-            "macd_slowperiod": self.macd_slowperiod,
-            "macd_signalperiod": self.macd_signalperiod,
+            "fastperiod": self.fastperiod,
+            "slowperiod": self.slowperiod,
+            "signalperiod": self.signalperiod,
         }
 
