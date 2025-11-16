@@ -15,6 +15,14 @@ from .strategies import (
     TripleEMAStrategy,
     TripleMACDStrategy,
 )
+from .visualization import (
+    plot_cumulative_equity,
+    plot_drawdowns,
+    plot_equity_curves,
+    plot_rolling_sharpe,
+    plot_signals,
+    plot_trade_returns,
+)
 
 __all__ = [
     "BacktestConfig",
@@ -34,4 +42,10 @@ __all__ = [
     "run_grid_search",
     "save_grid_results",
     "load_config",
+    "plot_rolling_sharpe",
+    "plot_drawdowns",
+    "plot_signals",
+    "plot_equity_curves",
+    "plot_trade_returns",
+    "plot_cumulative_equity",
 ]

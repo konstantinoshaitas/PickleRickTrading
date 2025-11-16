@@ -8,6 +8,8 @@ python main.py --config config/default.yml fetch --force
 ## Run Backtest
 ```bash
 python main.py --config config/default.yml backtest
+python main.py --config config/default.yml backtest --plot
+python main.py backtest --plot --plot-dir plots/
 
 
 ```

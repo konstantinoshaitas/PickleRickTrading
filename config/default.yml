@@ -1,21 +1,21 @@
 data:
-  ticker: AAPL
+  ticker: GOOG
   start: '2010-01-01'
   end:
   interval: 1d
   data_source: alphavantage  # Options: "yfinance" or "alphavantage"
   local_csv:
-  cache_csv: data/cache/AAPL_1D.csv
+  cache_csv: data/cache/GOOG_1D.csv
 
 strategy:
   name: ensemble
-  params:  # 3,70,200,20,28,12
-    ema_fast: 3
-    ema_mid: 70 
-    ema_slow: 200
-    fastperiod: 20
-    slowperiod: 28
-    signalperiod: 12
+  params:  # 5,80,160,30,75,40
+    ema_fast: 5
+    ema_mid: 80 
+    ema_slow: 160
+    fastperiod: 30
+    slowperiod: 75
+    signalperiod: 40
   grid:
     # EMA parameters (7 values each - targets ~10-15 min runtime)
     ema_fast: [3, 5, 10, 15, 18, 20, 25]
@@ -28,8 +28,8 @@ strategy:
 
 backtest:
   init_cash: 100000
-  fees: 0.0005
-  slippage: 0.0005
+  fees: 0.0004
+  slippage: 0.0002
   freq: D
   train_ratio: 0.6
 
