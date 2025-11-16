@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import pandas as pd
 
@@ -31,8 +31,17 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
     return close, ohlcv
 
 
-def run_single_backtest(cfg: WorkflowConfig, close: pd.Series) -> Dict[str, Dict]:
-    """Run the configured strategy on train/validation splits."""
+def run_single_backtest(cfg: WorkflowConfig, close: pd.Series, return_portfolios: bool = False) -> Dict[str, Any]:
+    """Run the configured strategy on train/validation splits.
+    
+    Args:
+        cfg: Workflow configuration
+        close: Price series
+        return_portfolios: If True, include portfolio objects and signals in output for plotting
+        
+    Returns:
+        Dictionary with metrics and optionally portfolios/signals for visualization
+    """
     train_close, val_close = split_train_val(close, cfg.backtest.train_ratio)
     strategy_cls = StrategyFactory[cfg.strategy.name]
     strategy = strategy_cls(**cfg.strategy.params)
@@ -46,12 +55,25 @@ def run_single_backtest(cfg: WorkflowConfig, close: pd.Series) -> Dict[str, Dict
         "train": train_metrics,
         "train_window": (train_close.index[0], train_close.index[-1]),
     }
+    
+    if return_portfolios:
+        outputs["train_portfolio"] = train_portfolio
+        outputs["train_entries"] = train_entries
+        outputs["train_exits"] = train_exits
+        outputs["train_close"] = train_close
+    
     if len(val_close) > 0:
         val_entries, val_exits = strategy.generate_signals(val_close)
         val_portfolio = engine.run(val_close, (val_entries, val_exits))
         outputs["validation"] = compute_metrics(val_portfolio, val_close, cfg.backtest.freq)
         outputs["benchmark"] = buy_and_hold(val_close, cfg.backtest)
         outputs["validation_window"] = (val_close.index[0], val_close.index[-1])
+        
+        if return_portfolios:
+            outputs["val_portfolio"] = val_portfolio
+            outputs["val_entries"] = val_entries
+            outputs["val_exits"] = val_exits
+            outputs["val_close"] = val_close
 
     return outputs
 

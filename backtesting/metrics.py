@@ -12,17 +12,40 @@ import vectorbt as vbt
 def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Dict[str, float]:
     """Compute comprehensive metrics matching notebook exactly."""
     total_return = float(portfolio.total_return())
+    annualized_return = float(portfolio.annualized_return(freq=freq))
+    max_drawdown = float(portfolio.max_drawdown())
+    volatility = float(portfolio.annualized_volatility(freq=freq))
+    sharpe_ratio = float(portfolio.sharpe_ratio(freq=freq))
+    sortino_ratio = float(portfolio.sortino_ratio(freq=freq))
     
-    # Portfolio metrics
-    metrics = {
-        "total_return": total_return,
-        "annualized_return": float(portfolio.annualized_return(freq=freq)),
-        "sharpe_ratio": float(portfolio.sharpe_ratio(freq=freq)),
-        "sortino_ratio": float(portfolio.sortino_ratio(freq=freq)),
-        "max_drawdown": float(portfolio.max_drawdown()),
-        "volatility": float(portfolio.annualized_volatility(freq=freq)),
-        "total_trades": int(portfolio.trades.count()),
-    }
+    # Portfolio metrics with try/except for optional vectorbt methods
+    information_ratio = np.nan
+    tail_ratio = np.nan
+    deflated_sharpe_ratio = np.nan
+    try:
+        information_ratio = float(portfolio.information_ratio(freq=freq))
+    except Exception:
+        pass
+    try:
+        tail_ratio = float(portfolio.tail_ratio(freq=freq))
+    except Exception:
+        pass
+    try:
+        deflated_sharpe_ratio = float(portfolio.deflated_sharpe_ratio(freq=freq))
+    except Exception:
+        pass
+    
+    # Ulcer Index
+    returns = portfolio.returns()
+    ulcer_index = np.nan
+    if len(returns) > 0:
+        cum = (1 + returns).cumprod()
+        peak = cum.cummax()
+        dd = (cum - peak) / peak
+        ulcer_index = float(np.sqrt((dd.pow(2)).mean())) if len(dd) > 0 else np.nan
+    
+    # Calmar Ratio: Annualized Return / Max Drawdown
+    calmar_ratio = (annualized_return / abs(max_drawdown)) if max_drawdown != 0 else np.nan
     
     # Trade metrics (matching notebook logic)
     trades = portfolio.trades
@@ -33,6 +56,17 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     expectancy = 0.0
     avg_win_amount = 0.0
     avg_loss_amount = 0.0
+    payoff_ratio = np.nan
+    largest_win = np.nan
+    largest_loss = np.nan
+    winning_streak = np.nan
+    losing_streak = np.nan
+    gain_to_pain_ratio = np.nan
+    recovery_factor = np.nan
+    total_profit = 0.0
+    sqn = np.nan
+    omega_ratio = np.nan
+    serenity_index = np.nan
     
     if total_trades > 0:
         tr = trades.returns.values if hasattr(trades.returns, 'values') else np.array(trades.returns)
@@ -47,14 +81,87 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
             expectancy = float(tr.mean())
             avg_win_amount = float(pos.mean()) if len(pos) else 0.0
             avg_loss_amount = float(abs(neg.mean())) if len(neg) else 0.0
+            
+            # Payoff ratio
+            payoff_ratio = (avg_win_amount / avg_loss_amount) if avg_loss_amount not in (0.0, np.nan) else np.inf
+            
+            # Largest win/loss
+            largest_win = float(pos.max()) if len(pos) > 0 else np.nan
+            largest_loss = float(neg.min()) if len(neg) > 0 else np.nan
+            
+            # Gain to pain ratio
+            gain_to_pain_ratio = (gains / losses) if losses > 0 else np.inf
+            
+            # Total profit (absolute)
+            total_profit = float(tr.sum())
+            
+            # System Quality Number (SQN): Expectancy / StdDev of returns
+            if len(tr) > 1:
+                tr_std = float(np.std(tr))
+                sqn = (expectancy / tr_std) if tr_std != 0 else np.nan
+            
+            # Omega Ratio (probability-weighted gains above threshold / losses below threshold)
+            # Using threshold of 0 (risk-free rate)
+            threshold = 0.0
+            gains_above = pos[pos > threshold].sum() if len(pos) > 0 else 0.0
+            losses_below = abs(neg[neg < threshold].sum()) if len(neg) > 0 else 0.0
+            omega_ratio = (gains_above / losses_below) if losses_below > 0 else np.inf
+            
+            # Serenity Index: (Total Return / Max Drawdown) * (Win Rate / 100)
+            serenity_index = ((total_return / abs(max_drawdown)) * (win_rate_pct / 100.0)) if max_drawdown != 0 and not np.isnan(win_rate_pct) else np.nan
+        
+        # Winning/Losing streaks using vectorbt methods
+        try:
+            winning_streak = int(trades.winning_streak())
+        except Exception:
+            winning_streak = np.nan
+        try:
+            losing_streak = int(trades.losing_streak())
+        except Exception:
+            losing_streak = np.nan
     
-    metrics.update({
-        "win_rate_pct": win_rate_pct,
-        "profit_factor": profit_factor,
+    # Recovery Factor: Net Profit / Max Drawdown
+    if max_drawdown != 0:
+        recovery_factor = (total_profit / abs(max_drawdown))
+    else:
+        recovery_factor = np.nan
+    
+    # Trades per year
+    years = max((close.index[-1] - close.index[0]).days / 365.25, 1e-9)
+    trades_per_year = total_trades / years
+    
+    # Build metrics dictionary
+    metrics = {
+        "total_return": total_return,
+        "annualized_return": annualized_return,
+        "total_profit": total_profit,
+        "sharpe_ratio": sharpe_ratio,
+        "sortino_ratio": sortino_ratio,
+        "calmar_ratio": calmar_ratio,
+        "omega_ratio": omega_ratio,
+        "information_ratio": information_ratio,
+        "tail_ratio": tail_ratio,
+        "deflated_sharpe_ratio": deflated_sharpe_ratio,
+        "max_drawdown": max_drawdown,
+        "volatility": volatility,
+        "ulcer_index": ulcer_index,
+        "win_rate": win_rate_pct,
+        "total_trades": total_trades,
+        "trades_per_year": trades_per_year,
         "expectancy": expectancy,
+        "profit_factor": profit_factor,
+        "sqn": sqn,
+        "payoff_ratio": payoff_ratio,
+        "largest_win": largest_win,
+        "largest_loss": largest_loss,
         "avg_win_amount": avg_win_amount,
         "avg_loss_amount": avg_loss_amount,
-    })
+        "winning_streak": winning_streak,
+        "losing_streak": losing_streak,
+        "recovery_factor": recovery_factor,
+        "gain_to_pain_ratio": gain_to_pain_ratio,
+        "serenity_index": serenity_index,
+    }
     
     return metrics
 
