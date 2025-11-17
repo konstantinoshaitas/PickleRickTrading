@@ -37,6 +37,8 @@ data/*.csv
 # OS
 .DS_Store
 Thumbs.db
+Icon?
+**/Icon?
 
 # Logs
 *.log

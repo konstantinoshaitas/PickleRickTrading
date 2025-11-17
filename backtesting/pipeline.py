@@ -23,6 +23,7 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
         end=cfg.data.end,
         interval=cfg.data.interval,
         data_source=cfg.data.data_source,
+        asset_type=cfg.data.asset_type,
         local_csv=cfg.data.local_csv,
         cache_csv=cfg.data.cache_csv,
     )

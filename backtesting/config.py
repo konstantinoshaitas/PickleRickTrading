@@ -16,6 +16,7 @@ class DataConfig:
     end: Optional[str] = None
     interval: str = "1d"
     data_source: str = "yfinance"  # Options: "yfinance" or "alphavantage"
+    asset_type: Optional[str] = None  # Options: "crypto", "stock", or None (auto-detect)
     local_csv: Optional[str] = None
     cache_csv: Optional[str] = "data/cache.csv"
 
