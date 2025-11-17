@@ -6,6 +6,7 @@ The 'triple' refers to the three components: MACD line, Signal line, and Histogr
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -13,6 +14,9 @@ import numpy as np
 import pandas as pd
 import talib
 import vectorbt as vbt
+
+# Suppress pandas FutureWarning for fillna downcasting (we handle dtype conversion explicitly)
+warnings.filterwarnings('ignore', category=FutureWarning, message='.*Downcasting object dtype arrays.*')
 
 
 @dataclass

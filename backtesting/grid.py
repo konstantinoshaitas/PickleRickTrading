@@ -19,7 +19,11 @@ class GridSearch:
     
     def run(self, close: pd.Series, grid: Dict[str, List[int]], base_params: Dict[str, int]):
         keys = list(grid.keys())
-        for combo in itertools.product(*[grid[k] for k in keys]):
+        # Calculate total combinations for progress tracking
+        all_combos = list(itertools.product(*[grid[k] for k in keys]))
+        total_combos = len(all_combos)
+        
+        for i, combo in enumerate(all_combos, 1):
             params = dict(base_params)
             params.update(dict(zip(keys, combo)))
             
@@ -34,6 +38,13 @@ class GridSearch:
             metrics = compute_metrics(portfolio, close, self.engine.config.freq)
             metrics.update(params)
             self.results.append(metrics)
+            
+            # Print progress every 10% or every 50 iterations, whichever is more frequent
+            progress_interval = max(1, min(50, total_combos // 10))
+            if i % progress_interval == 0 or i == total_combos:
+                progress_pct = (i / total_combos) * 100
+                print(f"Progress: {i}/{total_combos} ({progress_pct:.1f}%) - {len(self.results)} valid results")
+        
         return self.results
     
     def _validate_params(self, params: Dict[str, int]) -> bool:

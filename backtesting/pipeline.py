@@ -99,6 +99,11 @@ def save_grid_results(search: GridSearch, path: Path, sort_by: str = "sharpe_rat
         path: Output file path
         sort_by: Metric to sort by (default: "sharpe_ratio")
         ascending: Sort order (default: False = descending)
+    
+    Note:
+        Metrics that cannot be calculated (e.g., deflated_sharpe_ratio if method unavailable,
+        winning_streak/losing_streak if no trades) will be np.nan, which pandas writes as
+        empty strings in CSV. This is expected behavior.
     """
     if not search.results:
         raise ValueError("No grid results to save.")
@@ -115,5 +120,6 @@ def save_grid_results(search: GridSearch, path: Path, sort_by: str = "sharpe_rat
             df = df.sort_values(metric_cols[0], ascending=ascending)
     
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Note: np.nan values will be written as empty strings in CSV (standard pandas behavior)
     df.to_csv(path, index=False)
     return path
