@@ -58,6 +58,28 @@ class WorkflowConfig:
     grid: GridConfig = field(default_factory=GridConfig)
 
 
+def _parse_grid_value(value):
+    """Parse grid value - supports both lists and range strings like '4:40:2'.
+    
+    Examples:
+        "4:40:2" -> [4, 6, 8, ..., 40]  (range from 4 to 40 with step 2)
+        [5, 15, 20, 30, 35] -> [5, 15, 20, 30, 35]  (explicit list, used as-is)
+    """
+    if isinstance(value, str) and ":" in value:
+        # Range notation: "start:end:step"
+        parts = value.split(":")
+        if len(parts) == 3:
+            try:
+                start, end, step = map(int, parts)
+                return list(range(start, end + 1, step))  # +1 to include end
+            except ValueError:
+                pass  # If parsing fails, treat as regular string (unlikely for grid params)
+    elif isinstance(value, list):
+        # Explicit list: use as-is
+        return value
+    return value
+
+
 def load_config(path: Path) -> WorkflowConfig:
     if not Path(path).exists():
         return WorkflowConfig()
@@ -65,9 +87,17 @@ def load_config(path: Path) -> WorkflowConfig:
     with open(path, "r", encoding="utf-8") as handle:
         payload = yaml.safe_load(handle) or {}
     
+    # Parse grid ranges if present
+    strategy_payload = payload.get("strategy", {})
+    if "grid" in strategy_payload:
+        strategy_payload["grid"] = {
+            k: _parse_grid_value(v) 
+            for k, v in strategy_payload["grid"].items()
+        }
+    
     return WorkflowConfig(
         data=DataConfig(**payload.get("data", {})),
-        strategy=StrategyConfig(**payload.get("strategy", {})),
+        strategy=StrategyConfig(**strategy_payload),
         backtest=BacktestConfig(**payload.get("backtest", {})),
         grid=GridConfig(**payload.get("grid", {})),
     )

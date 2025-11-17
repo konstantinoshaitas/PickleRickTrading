@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict
 
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
+
+# Suppress numpy RuntimeWarnings for division by zero/invalid operations
+# These are handled by explicit checks in the code, so warnings are safe to ignore
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Degrees of freedom.*')
 
 
 def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Dict[str, float]:
@@ -19,6 +25,7 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     sortino_ratio = float(portfolio.sortino_ratio(freq=freq))
     
     # Portfolio metrics with try/except for optional vectorbt methods
+    # Note: Some methods may not be available in all vectorbt versions or may require additional parameters
     information_ratio = np.nan
     tail_ratio = np.nan
     deflated_sharpe_ratio = np.nan
@@ -31,6 +38,8 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     except Exception:
         pass
     try:
+        # deflated_sharpe_ratio may not be available or may require number of trials parameter
+        # for multiple testing adjustment - if unavailable, remains np.nan
         deflated_sharpe_ratio = float(portfolio.deflated_sharpe_ratio(freq=freq))
     except Exception:
         pass
@@ -110,15 +119,23 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
             # Serenity Index: (Total Return / Max Drawdown) * (Win Rate / 100)
             serenity_index = ((total_return / abs(max_drawdown)) * (win_rate_pct / 100.0)) if max_drawdown != 0 and not np.isnan(win_rate_pct) else np.nan
         
-        # Winning/Losing streaks using vectorbt methods
-        try:
+    # Winning/Losing streaks using vectorbt methods
+    # Note: These are calculated outside the total_trades > 0 block to ensure they're always in the dict
+    # If methods fail or no trades exist, they remain np.nan (which pandas writes as empty string in CSV)
+    try:
+        if total_trades > 0:
             winning_streak = int(trades.winning_streak())
-        except Exception:
+        else:
             winning_streak = np.nan
-        try:
+    except Exception:
+        winning_streak = np.nan
+    try:
+        if total_trades > 0:
             losing_streak = int(trades.losing_streak())
-        except Exception:
+        else:
             losing_streak = np.nan
+    except Exception:
+        losing_streak = np.nan
     
     # Recovery Factor: Net Profit / Max Drawdown
     if max_drawdown != 0:
