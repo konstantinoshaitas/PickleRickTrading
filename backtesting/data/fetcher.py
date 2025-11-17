@@ -24,6 +24,7 @@ class DataFetcher:
         end: Optional[str] = None,
         interval: str = "1d",
         data_source: str = "yfinance",
+        asset_type: Optional[str] = None,
         local_csv: Optional[str] = None,
         cache_csv: Optional[str] = None,
     ):
@@ -32,6 +33,7 @@ class DataFetcher:
         self.end = end
         self.interval = interval
         self.data_source = data_source.lower()
+        self.asset_type = asset_type.lower() if asset_type else None
         self.local_csv = Path(local_csv) if local_csv else None
         self.cache_csv = Path(cache_csv) if cache_csv else None
         self.data: Optional[pd.DataFrame] = None
@@ -58,6 +60,31 @@ class DataFetcher:
                 "or invalid ticker/date range."
             )
         return self.data
+    
+    def _detect_asset_type(self) -> str:
+        """Detect asset type from ticker format or use explicit setting.
+        
+        Returns:
+            "crypto" or "stock"
+        """
+        if self.asset_type:
+            if self.asset_type in ("crypto", "stock"):
+                return self.asset_type
+            else:
+                raise ValueError(
+                    f"Invalid asset_type '{self.asset_type}'. "
+                    "Must be 'crypto' or 'stock'."
+                )
+        
+        # Auto-detect: tickers with format XXX-YYY (e.g., BTC-USD) are crypto
+        if "-" in self.ticker:
+            parts = self.ticker.split("-")
+            if len(parts) == 2:
+                # Common crypto ticker format: BTC-USD, ETH-USD, etc.
+                return "crypto"
+        
+        # Default to stock for ambiguous cases
+        return "stock"
     
     def _download_with_retry(self, max_retries: int = 3) -> pd.DataFrame:
         """Download data with retry logic based on selected data source."""
@@ -115,7 +142,16 @@ class DataFetcher:
         return pd.DataFrame()
     
     def _download_alphavantage(self, max_retries: int = 3) -> pd.DataFrame:
-        """Download data from Alpha Vantage API."""
+        """Download data from Alpha Vantage API (routes to crypto or stock endpoint)."""
+        asset_type = self._detect_asset_type()
+        
+        if asset_type == "crypto":
+            return self._download_alphavantage_crypto(max_retries)
+        else:
+            return self._download_alphavantage_stock(max_retries)
+    
+    def _download_alphavantage_stock(self, max_retries: int = 3) -> pd.DataFrame:
+        """Download stock data from Alpha Vantage API."""
         api_key = os.getenv("ALPHAVANTAGE_API_KEY")
         if not api_key:
             raise ValueError(
@@ -215,6 +251,194 @@ class DataFetcher:
             except Exception as e:
                 # For non-network errors, don't retry
                 print(f"Alpha Vantage download failed: {e}")
+                break
+        
+        # Return empty DataFrame if all attempts failed
+        return pd.DataFrame()
+    
+    def _download_alphavantage_crypto(self, max_retries: int = 3) -> pd.DataFrame:
+        """Download cryptocurrency data from Alpha Vantage API using DIGITAL_CURRENCY_DAILY."""
+        api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "ALPHAVANTAGE_API_KEY not found in environment variables. "
+                "Please set it in your .env file or export it as an environment variable."
+            )
+        
+        # Alpha Vantage only supports daily intervals for DIGITAL_CURRENCY_DAILY
+        if self.interval != "1d":
+            raise ValueError(
+                f"Alpha Vantage DIGITAL_CURRENCY_DAILY only supports daily (1d) intervals. "
+                f"Requested interval: {self.interval}"
+            )
+        
+        # Parse ticker format: BTC-USD -> symbol="BTC", market="USD"
+        if "-" not in self.ticker:
+            raise ValueError(
+                f"Crypto ticker must be in format 'SYMBOL-MARKET' (e.g., 'BTC-USD'). "
+                f"Got: {self.ticker}"
+            )
+        
+        parts = self.ticker.split("-")
+        if len(parts) != 2:
+            raise ValueError(
+                f"Crypto ticker must be in format 'SYMBOL-MARKET' (e.g., 'BTC-USD'). "
+                f"Got: {self.ticker}"
+            )
+        
+        symbol = parts[0].upper()
+        market = parts[1].upper()
+        
+        base_url = "https://www.alphavantage.co/query"
+        
+        for attempt in range(max_retries):
+            try:
+                params = {
+                    "function": "DIGITAL_CURRENCY_DAILY",
+                    "symbol": symbol,
+                    "market": market,
+                    "apikey": api_key,
+                    "outputsize": "full",  # Get full historical data
+                    "datatype": "json",
+                }
+                
+                response = requests.get(base_url, params=params, timeout=30)
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                # Check for API errors
+                if "Error Message" in data:
+                    raise ValueError(f"Alpha Vantage API error: {data['Error Message']}")
+                if "Note" in data:
+                    raise ValueError(f"Alpha Vantage API rate limit: {data['Note']}")
+                if "Information" in data:
+                    raise ValueError(f"Alpha Vantage API info: {data['Information']}")
+                
+                # Extract time series data
+                time_series_key = "Time Series (Digital Currency Daily)"
+                if time_series_key not in data:
+                    raise ValueError(f"Unexpected Alpha Vantage response format. Keys: {list(data.keys())}")
+                
+                time_series = data[time_series_key]
+                if not time_series:
+                    raise ValueError("No time series data returned from Alpha Vantage")
+                
+                # Convert to DataFrame
+                df = pd.DataFrame.from_dict(time_series, orient="index")
+                df.index = pd.to_datetime(df.index)
+                df.index.name = "Date"
+                
+                # Debug: Print date range before filtering
+                if len(df) > 0:
+                    print(f"DEBUG: Alpha Vantage returned {len(df)} rows, date range: {df.index.min()} to {df.index.max()}")
+                
+                # Map Alpha Vantage crypto columns to standard format
+                # Alpha Vantage crypto returns: "1. open", "2. high", "3. low", "4. close", "5. volume"
+                # (Same format as stock endpoint, but no adjusted close - crypto doesn't have splits/dividends)
+                # Try to match exact column names first (most common case)
+                column_mapping = {}
+                
+                # Check for exact column names (most common format)
+                if "1. open" in df.columns:
+                    column_mapping["1. open"] = "Open"
+                if "2. high" in df.columns:
+                    column_mapping["2. high"] = "High"
+                if "3. low" in df.columns:
+                    column_mapping["3. low"] = "Low"
+                if "4. close" in df.columns:
+                    column_mapping["4. close"] = "Close"
+                if "5. volume" in df.columns:
+                    column_mapping["5. volume"] = "Volume"
+                
+                # If exact names not found, try market-specific format (e.g., "1a. open (USD)")
+                if not all(key in column_mapping for key in ["1. open", "2. high", "3. low", "4. close"]):
+                    market_suffix = f" ({market})"
+                    market_suffix_lower = market_suffix.lower()
+                    
+                    for col in df.columns:
+                        col_lower = col.lower()
+                        if f"open{market_suffix_lower}" in col_lower and "1. open" not in column_mapping:
+                            column_mapping[col] = "Open"
+                        elif f"high{market_suffix_lower}" in col_lower and "2. high" not in column_mapping:
+                            column_mapping[col] = "High"
+                        elif f"low{market_suffix_lower}" in col_lower and "3. low" not in column_mapping:
+                            column_mapping[col] = "Low"
+                        elif f"close{market_suffix_lower}" in col_lower and "4. close" not in column_mapping:
+                            column_mapping[col] = "Close"
+                
+                # Final fallback: search for columns containing keywords
+                if "Open" not in column_mapping.values():
+                    for col in df.columns:
+                        if "open" in col.lower() and "high" not in col.lower() and "low" not in col.lower() and "close" not in col.lower():
+                            column_mapping[col] = "Open"
+                            break
+                if "High" not in column_mapping.values():
+                    for col in df.columns:
+                        if "high" in col.lower() and "open" not in col.lower() and "low" not in col.lower() and "close" not in col.lower():
+                            column_mapping[col] = "High"
+                            break
+                if "Low" not in column_mapping.values():
+                    for col in df.columns:
+                        if "low" in col.lower() and "open" not in col.lower() and "high" not in col.lower() and "close" not in col.lower():
+                            column_mapping[col] = "Low"
+                            break
+                if "Close" not in column_mapping.values():
+                    for col in df.columns:
+                        if "close" in col.lower() and "open" not in col.lower() and "high" not in col.lower() and "low" not in col.lower():
+                            column_mapping[col] = "Close"
+                            break
+                if "Volume" not in column_mapping.values():
+                    for col in df.columns:
+                        if "volume" in col.lower() and "market cap" not in col.lower():
+                            column_mapping[col] = "Volume"
+                            break
+                
+                # Verify we found all required columns
+                required = ["Open", "High", "Low", "Close", "Volume"]
+                if not all(col in column_mapping.values() for col in required):
+                    missing = [col for col in required if col not in column_mapping.values()]
+                    raise ValueError(
+                        f"Could not find all required OHLC columns. Missing: {missing}. "
+                        f"Available columns: {list(df.columns)}"
+                    )
+                
+                # Rename columns to standard format
+                df = df.rename(columns=column_mapping)
+                
+                # Convert to numeric
+                for col in ["Open", "High", "Low", "Close", "Volume"]:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                
+                # Select only the columns we need (matching yfinance format)
+                df = df[["Open", "High", "Low", "Close", "Volume"]]
+                
+                # Sort by date (ascending)
+                df = df.sort_index()
+                
+                # Filter by date range if specified
+                if self.start:
+                    start_ts = pd.to_datetime(self.start)
+                    df = df[df.index >= start_ts]
+                if self.end:
+                    end_ts = pd.to_datetime(self.end)
+                    df = df[df.index <= end_ts]
+                
+                if df.empty:
+                    raise ValueError("No data in specified date range")
+                
+                return df
+                
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    wait_time = 5 * (attempt + 1)  # 5s, 10s, 15s
+                    print(f"Alpha Vantage crypto download attempt {attempt + 1} failed: {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"All {max_retries} Alpha Vantage crypto download attempts failed. Last error: {e}")
+            except Exception as e:
+                # For non-network errors, don't retry
+                print(f"Alpha Vantage crypto download failed: {e}")
                 break
         
         # Return empty DataFrame if all attempts failed

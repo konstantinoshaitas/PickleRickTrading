@@ -10,22 +10,22 @@ data:
 
 strategy:
   name: ensemble
-  params:  # 6,14,135,16,95,35
-    ema_fast: 9
-    ema_mid: 25 
-    ema_slow: 85
-    fastperiod: 16
-    slowperiod: 95
-    signalperiod: 20
+  params:  # 12,22,82,20,27,28
+    ema_fast: 12
+    ema_mid: 22 
+    ema_slow: 82
+    fastperiod: 20
+    slowperiod: 27
+    signalperiod: 28
   grid:
     # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
     # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)
-    ema_fast: "8:12:1" 
-    ema_mid: "20:26:2"   
-    ema_slow: "72:82:2"   
-    fastperiod: "15:20:1"   
-    slowperiod: "25:33:2"
-    signalperiod: "26:32:2"
+    ema_fast: "8:30:4" 
+    ema_mid: "16:48:8"   
+    ema_slow: "40:140:20"   
+    fastperiod: "5:25:5"   
+    slowperiod: "20:95:15"
+    signalperiod: "15:55:10"
 
 backtest:
   init_cash: 100000
