@@ -1,0 +1,92 @@
+The momentum portfolio - Code Roadmap
+
+Foreword:
+I want to insist that you follow this article first. I've given an example notebook of the TRIPLE EMAs before, but if I were to hand over another notebook, my feeling is that it becomes too easy to produce half-assed strategies. So see this as a final exam for the bootcamp. This SHOULD NOT be easy to do, as at this point you should have talked to me extensively about your code and methodology already, and making the ensembles should have seen you coding independently and becoming more proficient. Obviously, while constructing this notebook, I will offer any and all assistance within reason because I want you to succeed. The logic of my code is carefully broken down below, and the video should provide ample guidance to build it, while I can also supervise your creation to make sure it's ready for the markets. 
+
+Before starting this section i highly advice having talked to me and having assembled strategies for 8-12 assets. With all of them having sharpe ratio's of atleast 1.45~ and winrate >~50% and a profit factor above 2.5
+
+The assets should also preferably be of varying risk profiles, for example.
+
+1-2 in crypto
+
+1-2 leveraged ETF's
+
+1-2 big tech or similar
+
+1-3 Gold, SPY/QQQ
+
+
+
+What you can achieve, and I believe if you model for longer you can surpass me:
+
+
+
+Lets talk soon MORTY! you son of a bitch.
+
+Goodluck, 
+
+
+
+-Rick
+
+
+
+Introduction
+The final portfolio that aggregates all of the bootcamp's strategies is a Relative Strength Index (RSI)-based momentum rotational trading strategy. I performed a backtest across a diversified universe of assets, including various ETFs and Cryptocurrencies. The fundamental logic is to use the RSI of the assets' cumulative returns to generate a relative ranking of strength. I then allocated a fixed weight to the top-ranked assets, employing a designated Safe Haven asset (l used GLD because in the portfolio optimization it was the most highly allocated asset ergo the lowest risk one) and a Cash option to manage risk and fill the portfolio when the target number of strong assets wasn't met. The final, critical step was to calculate a wide array of sophisticated performance and risk metrics, most notably the Probabilistic Sharpe Ratio (PSR), and to compare the strategy's results against theoretical Maximum Sharpe and Maximum Omega portfolio benchmarks. This structure provides a complete workflow from raw data ingestion to advanced performance validation.
+
+
+
+Logic and Flow Breakdown
+I structured the script following a standard, four-phased backtesting pipeline, mimicking a real-world trading system:
+
+
+
+I. Data Preparation: Setting the Foundation
+In this initial phase, I handled data ingestion where I loaded pre-processed asset return data (including columns for Buy & Hold returns, Strategy Returns, and an existing Position signal) from separate files for each ticker. Once loaded, I merged the data for all assets by date. A crucial step here was the pre-analysis, where I calculated a correlation matrix using the raw Buy & Hold Returns and Strategy Returns. This served two purposes: confirming data alignment and establishing a baseline for the level of diversification achieved by the asset universe.
+
+
+
+II. Signal Generation: Creating the Trading Edge
+I moved from raw data to actionable signals. I calculated the Relative Strength Index (RSI), a common momentum indicator, but with a key modification: I applied it to the assets' cumulative return series rather than their price, making it a measure of the strength of the performance trend. I then used this RSI value to create a Ranking System. I filtered out assets with an RSI below a neutral threshold (e.g., 50) entirely, while I ranked the remaining assets according to their relative strength (1st being the strongest).
+
+
+
+III. Strategy Execution: Applying the Trading Rules
+I implemented the core logic of the strategy here. First, I defined key strategy parameters, specifically the number of top assets to hold (TOP_N) and the chosen SAFE_HAVEN asset. I then began the Dynamic Allocation process, which is the heart of the rotational strategy. I critically applied a 1-day lag, meaning I used yesterday's rank to determine today's trade, ensuring realistic execution.
+
+I applied a dual eligibility filter: an asset must be both one of the top-ranked assets and satisfy any pre-existing position signal. I gave selected assets a fixed weight (e.g., 1 divided by TOP_N). My Risk-Off Mechanism was vital: if fewer than TOP_N assets qualified, I allocated the remaining weight to the Safe Haven (if it was also eligible), or I defaulted to Cash (zero allocation) if the safe haven wasn't eligible. Finally, I multiplied the daily portfolio weights by the asset returns to calculate the strategy's overall Daily Return.
+
+
+
+IV. Backtest Analysis: Performance and Risk Assessment
+The final phase focused on rigorous validation. I first calculated the Net Returns by factoring in trading commissions, which I derived from the portfolio's turnover (the day-to-day change in total asset weights). This was followed by calculating comprehensive performance metrics—standard measures like CAGR and Max Drawdown, as well as sophisticated, risk-adjusted metrics like the Probabilistic Sharpe Ratio (PSR). The final part involved setting and comparing the results against two crucial benchmarks: theoretical portfolios I optimized to achieve the Maximum Sharpe Ratio and Maximum Omega Ratio. This determined if the dynamic strategy truly outperformed the best possible static (fixed-weight) allocation over the same period.
+
+
+
+Data Management and Preparation
+I emphasized the use of pandas for loading data and defining the asset universe. A key teaching point was the importance of baseline analysis: by creating a correlation matrix for the raw returns early on, I established a clear risk profile for the underlying assets before applying the strategy, which was critical for understanding the strategy's subsequent diversification effectiveness.
+
+
+
+The Momentum Signal
+I focused on the application of technical indicators. Instead of the traditional price input, I calculated the RSI on the Cumulative Return series. This transformed the indicator from a measure of short-term overbought/oversold conditions to a powerful tool for measuring the relative strength of long-term performance trends (Note: I used Threshold 50, not 70 or 30). I then used the ranking logic to turn this quantitative output into a categorical signal, showing how to convert a continuous metric into an explicit trading decision.
+
+
+
+Strategy Rules and Dynamic Execution
+This section teaches the practical realities of trading logic. First, I defined the strategy parameters explicitly. The most important concept was the 1-day Signal Lag—I used yesterday's closing data to inform today's action—which separated a realistic backtest from a flawed, look-ahead simulation. I drove the Dynamic Allocation logic by a hierarchy: the Top N assets got the weight first, but only if they passed a secondary pre-existing Position filter. My Risk-Off Mechanism taught risk management, where I defaulted the strategy to the Safe Haven or Cash instead of allocating to poorly performing assets, ensuring capital preservation.
+
+
+
+Return Calculation and Realism
+I explained how I derived Daily Return from cumulative return series and how the Portfolio Daily Return was a simple weighted average of the assets' returns. For realism, I introduced commissions. You should learn to calculate trading cost by measuring turnover—the absolute change in the portfolio's composition day-over-day—and applying a fixed COMMISSION_RATE.
+
+
+
+Advanced Performance Analysis
+The final lesson moved beyond basic metrics. I taught the significance of the Sortino Ratio (which only penalizes downside volatility) and the Max Drawdown. Crucially, I introduced the Probabilistic Sharpe Ratio (PSR), explaining that it was a superior validation tool because it provided a statistical confidence level that the strategy's Sharpe Ratio was truly positive and robust, accounting for issues like non-normal returns often found in trading.
+
+
+
+Optimization Benchmarking
+The final concept was the necessity of setting rigorous benchmarks. I explained Modern Portfolio Theory (MPT) and how I used numerical optimization techniques (like those found in scipy) to find the theoretical Maximum Sharpe or Maximum Omega portfolio. This step taught measuring the dynamic strategy not against a simple buy-and-hold, but against the best possible fixed-weight portfolio that could have been achieved, providing the gold standard for performance evaluation.

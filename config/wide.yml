@@ -20,12 +20,12 @@ strategy:
   grid:
     # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
     # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)
-    ema_fast: "8:30:4" 
-    ema_mid: "16:48:8"   
-    ema_slow: "40:140:20"   
-    fastperiod: "5:25:5"   
-    slowperiod: "20:95:15"
-    signalperiod: "15:55:10"
+    ema_fast: "4:60:6" 
+    ema_mid: "65:165:10"   
+    ema_slow: "80:240:40"   
+    fastperiod: "5:75:5"   
+    slowperiod: "50:160:10"
+    signalperiod: "5:80:5"
 
 backtest:
   init_cash: 100000
