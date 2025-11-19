@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 
@@ -79,7 +79,7 @@ def run_single_backtest(cfg: WorkflowConfig, close: pd.Series, return_portfolios
     return outputs
 
 
-def run_grid_search(cfg: WorkflowConfig, close: pd.Series):
+def run_grid_search(cfg: WorkflowConfig, close: pd.Series, n_jobs: Optional[int] = None):
     """Execute brute-force grid search on the training slice."""
     if not cfg.strategy.grid:
         raise ValueError("No grid defined in config.")
@@ -87,24 +87,23 @@ def run_grid_search(cfg: WorkflowConfig, close: pd.Series):
     engine = BacktestEngine(cfg.backtest)
     strategy_cls = StrategyFactory[cfg.strategy.name]
     
-    search = GridSearch(engine, strategy_cls)
+    search = GridSearch(engine, strategy_cls, n_jobs=n_jobs)
     search.run(train_close, cfg.strategy.grid, cfg.strategy.params)
     return search
 
 
 def save_grid_results(search: GridSearch, path: Path, sort_by: str = "sharpe_ratio", ascending: bool = False):
-    """Persist grid search results to CSV, sorted by specified metric.
+    """Persist grid search results to Parquet format, sorted by specified metric.
     
     Args:
         search: GridSearch instance with results
-        path: Output file path
+        path: Output file path (will use .parquet extension if not specified)
         sort_by: Metric to sort by (default: "sharpe_ratio")
         ascending: Sort order (default: False = descending)
     
     Note:
-        Metrics that cannot be calculated (e.g., deflated_sharpe_ratio if method unavailable,
-        winning_streak/losing_streak if no trades) will be np.nan, which pandas writes as
-        empty strings in CSV. This is expected behavior.
+        Parquet format preserves data types and is much more efficient for large datasets.
+        Metrics that cannot be calculated will be np.nan (preserved in Parquet).
     """
     if not search.results:
         raise ValueError("No grid results to save.")
@@ -120,7 +119,22 @@ def save_grid_results(search: GridSearch, path: Path, sort_by: str = "sharpe_rat
         if metric_cols:
             df = df.sort_values(metric_cols[0], ascending=ascending)
     
+    # Ensure .parquet extension
+    if path.suffix.lower() != '.parquet':
+        path = path.with_suffix('.parquet')
+    
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Note: np.nan values will be written as empty strings in CSV (standard pandas behavior)
-    df.to_csv(path, index=False)
+    
+    # Save as Parquet with snappy compression (good balance of speed and size)
+    print(f"Writing {len(df):,} rows to {path}...")
+    df.to_parquet(
+        path,
+        compression='snappy',
+        index=False,
+        engine='pyarrow'
+    )
+    
+    file_size = path.stat().st_size / (1024 * 1024)  # MB
+    print(f"Saved {file_size:.1f} MB to {path}")
+    
     return path
