@@ -1,31 +1,31 @@
 data:
-  ticker: AAPL
+  ticker: GOOG
   start: '2018-01-01'
   end:
   interval: 1d
   data_source: alphavantage  # Options: "yfinance" or "alphavantage"
   asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
   local_csv:
-  cache_csv: data/cache/AAPL.csv
+  cache_csv: data/cache/GOOG_1D.csv
 
 strategy:
   name: ensemble
-  params:  # 8,16,140,15,95,35
-    ema_fast: 8
-    ema_mid: 16
-    ema_slow: 140
+  params:  # 4, 75, 120, 15, 90, 45
+    ema_fast: 4
+    ema_mid: 75
+    ema_slow: 120
     fastperiod: 15
-    slowperiod: 95
-    signalperiod: 35
+    slowperiod: 90
+    signalperiod: 45
   grid:
     # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
     # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)
-    ema_fast: "6:10:1" 
-    ema_mid: "14:18:1"   
-    ema_slow: "135:145:5"   
+    ema_fast: "3:6:1" # 4,75,120,15,90,45
+    ema_mid: "72:78:1"   
+    ema_slow: "118:124:1"   
     fastperiod: "13:17:1"   
-    slowperiod: "90:100:5"
-    signalperiod: "30:40:5"
+    slowperiod: "88:93:1"
+    signalperiod: "43:47:1"
 
 backtest:
   init_cash: 100000
