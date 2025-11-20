@@ -184,10 +184,10 @@ def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path, n_jobs:
             sort_metric = metric_cols[0]
             df = df.sort_values(sort_metric, ascending=False)
     
-        print(df.head(top).to_string(index=False))
-        if output:
-            saved_path = save_grid_results(search, output, sort_by=sort_metric)
-            print(f"\nSaved full results to {saved_path} (sorted by {sort_metric})")
+    print(df.head(top))
+    if output:
+        saved_path = save_grid_results(search, output, sort_by=sort_metric)
+        print(f"\nSaved full results to {saved_path} (sorted by {sort_metric})")
 
 
 def _print_metrics(metrics: dict):
