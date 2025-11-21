@@ -39,7 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     grid = sub.add_parser("grid", help="Run grid search on training window")
     grid.add_argument("--refresh", action="store_true", help="Refetch data before running")
     grid.add_argument("--top", type=int, default=5, help="Rows to display from sorted results")
-    grid.add_argument("--output", type=Path, default=Path("data/grid_results.csv"), help="CSV path for results")
+    grid.add_argument("--output", type=Path, default=Path("data/grid_results.parquet"), help="Parquet file path for results (default: .parquet)")
+    grid.add_argument("--n-jobs", type=int, default=None, help="Number of parallel processes (default: CPU count - 1)")
     
     return parser
 
@@ -163,9 +164,9 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 pass
 
 
-def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path):
+def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path, n_jobs: Optional[int] = None):
     close, _ = load_prices(cfg, force_download=refresh)
-    search = run_grid_search(cfg, close)
+    search = run_grid_search(cfg, close, n_jobs=n_jobs)
     df = pd.DataFrame(search.results)
     if df.empty:
         print("Grid search produced no valid results.")
@@ -183,10 +184,10 @@ def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path):
             sort_metric = metric_cols[0]
             df = df.sort_values(sort_metric, ascending=False)
     
-    print(df.head(top).to_string(index=False))
+    print(df.head(top))
     if output:
-        save_grid_results(search, output, sort_by=sort_metric)
-        print(f"\nSaved full results to {output} (sorted by {sort_metric})")
+        saved_path = save_grid_results(search, output, sort_by=sort_metric)
+        print(f"\nSaved full results to {saved_path} (sorted by {sort_metric})")
 
 
 def _print_metrics(metrics: dict):
@@ -204,7 +205,7 @@ def main():
     elif args.command == "backtest":
         cmd_backtest(cfg, refresh=args.refresh, plot=args.plot, plot_dir=args.plot_dir)
     elif args.command == "grid":
-        cmd_grid(cfg, refresh=args.refresh, top=args.top, output=args.output)
+        cmd_grid(cfg, refresh=args.refresh, top=args.top, output=args.output, n_jobs=args.n_jobs)
     else:
         parser.error("Unknown command")
 
