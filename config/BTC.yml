@@ -1,22 +1,22 @@
 data:
-  ticker: QQQ
+  ticker: BTC
   start: '2018-01-01'
   end:
   interval: 1d
   data_source: alphavantage  # Options: "yfinance" or "alphavantage"
   asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
   local_csv:
-  cache_csv: data/cache/QQQ_1D.csv
+  cache_csv: data/cache/BTC_1D.csv
 
 strategy:
   name: ensemble
-  params:  # 4, 76, 119, 14, 130, 40
+  params:  # 4, 76, 119, 14, 89, 44
     ema_fast: 4
-    ema_mid: 76
-    ema_slow: 130
+    ema_mid: 76 
+    ema_slow: 119
     fastperiod: 14
-    slowperiod: 130
-    signalperiod: 40
+    slowperiod: 89
+    signalperiod: 44
   grid:
     # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
     # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)

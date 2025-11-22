@@ -16,8 +16,10 @@ from backtesting.pipeline import (
     save_grid_results,
 )
 from backtesting.visualization import (
+    plot_cumulative_equity,
     plot_drawdowns,
     plot_equity_curves,
+    plot_rolling_sharpe,
     plot_signals,
     plot_trade_returns,
 )
@@ -154,6 +156,43 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
             )
             if plot_dir:
                 print("  ✓ Saved trade_returns.png")
+        
+        # 5. Rolling Sharpe ratio (validation set)
+        if "val_portfolio" in metrics:
+            save_path = (plot_dir / "rolling_sharpe_val.png") if plot_dir else None
+            plot_rolling_sharpe(
+                metrics["val_portfolio"],
+                metrics["val_close"],
+                cfg.backtest.freq,
+                title=f"Rolling Sharpe - {cfg.strategy.name} (Validation)",
+                save_path=save_path,
+            )
+            if plot_dir:
+                print("  ✓ Saved rolling_sharpe_val.png")
+        
+        # 6. Rolling Sharpe ratio (train set)
+        if "train_portfolio" in metrics:
+            save_path = (plot_dir / "rolling_sharpe_train.png") if plot_dir else None
+            plot_rolling_sharpe(
+                metrics["train_portfolio"],
+                metrics["train_close"],
+                cfg.backtest.freq,
+                title=f"Rolling Sharpe - {cfg.strategy.name} (Train)",
+                save_path=save_path,
+            )
+            if plot_dir:
+                print("  ✓ Saved rolling_sharpe_train.png")
+        
+        # 7. Cumulative equity per trade (validation set)
+        if "val_portfolio" in metrics:
+            save_path = (plot_dir / "cumulative_equity.png") if plot_dir else None
+            plot_cumulative_equity(
+                metrics["val_portfolio"],
+                title=f"Cumulative Equity - {cfg.strategy.name} (Validation)",
+                save_path=save_path,
+            )
+            if plot_dir:
+                print("  ✓ Saved cumulative_equity.png")
         
         if not plot_dir:
             print("\nPlots displayed. Close windows to continue.")
