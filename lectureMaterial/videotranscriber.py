@@ -23,7 +23,7 @@ def get_device(device: str = None) -> str:
     if device:
         return device
     
-    try:
+    try: 
         import torch
         if torch.cuda.is_available():
             return "cuda"
