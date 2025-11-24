@@ -1,12 +1,12 @@
 data:
-  ticker: GOOG
+  ticker: BTC
   start: '2018-01-01'
   end:
   interval: 1d
   data_source: alphavantage  # Options: "yfinance" or "alphavantage"
   asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
   local_csv:
-  cache_csv: data/cache/GOOG_1D.csv
+  cache_csv: data/cache/BTC_1D.csv
 
 strategy:
   name: ensemble
