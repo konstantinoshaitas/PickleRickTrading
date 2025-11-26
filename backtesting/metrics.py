@@ -88,15 +88,16 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     else:
         net_profit = 0.0
     
-    # Calculate Max Drawdown in dollars: Max Drawdown % * Initial Cash
-    # Get initial cash from portfolio wrapper
-    try:
-        init_cash = float(portfolio.wrapper.init_cash)
-    except (AttributeError, TypeError):
-        # Fallback: use initial portfolio value if wrapper not available
-        init_cash = float(portfolio_values.iloc[0]) if len(portfolio_values) > 0 else 0.0
+
+    if len(portfolio_values) > 0:
+        peak_value = float(portfolio_values.max())
+    else:
+        try:
+            peak_value = float(portfolio.wrapper.init_cash)
+        except (AttributeError, TypeError):
+            peak_value = 0.0
     
-    max_drawdown_dollars = abs(max_drawdown) * init_cash if max_drawdown != 0 else 0.0
+    max_drawdown_dollars = abs(max_drawdown) * peak_value if max_drawdown != 0 else 0.0
     
     if total_trades > 0:
         tr = trades.returns.values if hasattr(trades.returns, 'values') else np.array(trades.returns)
