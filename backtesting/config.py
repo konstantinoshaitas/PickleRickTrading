@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -52,11 +52,41 @@ class GridConfig:
 
 
 @dataclass
+class AssetConfig:
+    """Configuration for a specific asset's strategy."""
+    strategy: str
+    params: Dict[str, Any]
+
+
+@dataclass
+class PortfolioConfig:
+    """Configuration for multi-asset portfolio backtesting.
+    
+    Attributes:
+        tickers: List of asset tickers to include in portfolio
+        safe_haven_ticker: Ticker for safe haven asset (default "GLD")
+        rsi_period: Period for RSI calculation (default 14)
+        rsi_threshold: Minimum RSI value to qualify for selection (default 50.0)
+        top_k: Number of top assets to select (default 5)
+        assets: Per-asset strategy configuration (ticker -> AssetConfig)
+        grid: Grid search space for portfolio parameters
+    """
+    tickers: List[str] = field(default_factory=lambda: ["BTC-USD", "ETH-USD", "AAPL", "GOOG", "GLD"])
+    safe_haven_ticker: str = "GLD"
+    rsi_period: int = 14
+    rsi_threshold: float = 50.0
+    top_k: int = 5
+    assets: Dict[str, AssetConfig] = field(default_factory=dict)
+    grid: Dict[str, List[Any]] = field(default_factory=dict)
+
+
+@dataclass
 class WorkflowConfig:
     data: DataConfig = field(default_factory=DataConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     grid: GridConfig = field(default_factory=GridConfig)
+    portfolio: Optional[PortfolioConfig] = None
 
 
 def _parse_grid_value(value):
@@ -88,7 +118,7 @@ def load_config(path: Path) -> WorkflowConfig:
     with open(path, "r", encoding="utf-8") as handle:
         payload = yaml.safe_load(handle) or {}
     
-    # Parse grid ranges if present
+    # Parse strategy grid ranges if present
     strategy_payload = payload.get("strategy", {})
     if "grid" in strategy_payload:
         strategy_payload["grid"] = {
@@ -96,9 +126,30 @@ def load_config(path: Path) -> WorkflowConfig:
             for k, v in strategy_payload["grid"].items()
         }
     
+    # Parse portfolio config if present
+    portfolio_payload = payload.get("portfolio")
+    portfolio_config = None
+    if portfolio_payload:
+        # Parse portfolio grid ranges if present
+        if "grid" in portfolio_payload:
+            portfolio_payload["grid"] = {
+                k: _parse_grid_value(v) 
+                for k, v in portfolio_payload["grid"].items()
+            }
+        
+        # Parse assets config if present
+        if "assets" in portfolio_payload:
+            assets_dict = {}
+            for ticker, asset_data in portfolio_payload["assets"].items():
+                assets_dict[ticker] = AssetConfig(**asset_data)
+            portfolio_payload["assets"] = assets_dict
+            
+        portfolio_config = PortfolioConfig(**portfolio_payload)
+    
     return WorkflowConfig(
         data=DataConfig(**payload.get("data", {})),
         strategy=StrategyConfig(**strategy_payload),
         backtest=BacktestConfig(**payload.get("backtest", {})),
         grid=GridConfig(**payload.get("grid", {})),
+        portfolio=portfolio_config,
     )

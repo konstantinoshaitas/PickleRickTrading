@@ -1,6 +1,7 @@
 """Strategy registry with Triple EMA, Triple MACD, and Ensemble implementations."""
 
 from .ensemble import EnsembleStrategy
+from .rsi_filter_portfolio import RSIFilterPortfolioStrategy
 from .triple_ema import TripleEMAStrategy
 from .triple_macd import TripleMACDStrategy
 
@@ -15,4 +16,5 @@ __all__ = [
     "TripleEMAStrategy",
     "TripleMACDStrategy",
     "EnsembleStrategy",
+    "RSIFilterPortfolioStrategy",
 ]

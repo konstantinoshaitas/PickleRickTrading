@@ -12,6 +12,8 @@ from backtesting.config import WorkflowConfig, load_config
 from backtesting.pipeline import (
     load_prices,
     run_grid_search,
+    run_portfolio_backtest,
+    run_portfolio_grid_search,
     run_single_backtest,
     save_grid_results,
 )
@@ -44,6 +46,14 @@ def build_parser() -> argparse.ArgumentParser:
     grid.add_argument("--output", type=Path, default=Path("data/grid_results.parquet"), help="Parquet file path for results (default: .parquet)")
     grid.add_argument("--n-jobs", type=int, default=None, help="Number of parallel processes (default: CPU count - 1)")
     
+    portfolio = sub.add_parser("portfolio", help="Run multi-asset portfolio backtest")
+    portfolio.add_argument("--plot", action="store_true", help="Generate visualization plots")
+    portfolio.add_argument("--plot-dir", type=Path, default=None, help="Directory to save plots (default: display interactively)")
+    
+    p_grid = sub.add_parser("portfolio-grid", help="Run portfolio-level grid search")
+    p_grid.add_argument("--top", type=int, default=5, help="Rows to display from sorted results")
+    p_grid.add_argument("--output", type=Path, default=Path("data/portfolio_grid_results.parquet"), help="Parquet file path for results")
+
     return parser
 
 
@@ -229,6 +239,144 @@ def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path, n_jobs:
         print(f"\nSaved full results to {saved_path} (sorted by {sort_metric})")
 
 
+def cmd_portfolio(cfg: WorkflowConfig, plot: bool, plot_dir: Optional[Path]):
+    """Run multi-asset portfolio backtest."""
+    print("=" * 70)
+    print("MULTI-ASSET PORTFOLIO BACKTEST")
+    print("=" * 70)
+    
+    if not cfg.portfolio:
+        print("Error: Portfolio configuration not found in config file.")
+        print("Please add a 'portfolio' section with tickers, rsi params, etc.")
+        return
+        
+    print(f"Tickers: {', '.join(cfg.portfolio.tickers)}")
+    print(f"Safe Haven: {cfg.portfolio.safe_haven_ticker}")
+    print(f"RSI Params: Period={cfg.portfolio.rsi_period}, Threshold={cfg.portfolio.rsi_threshold}")
+    print(f"Top K: {cfg.portfolio.top_k}")
+    print(f"\nStrategy: {cfg.strategy.name}")
+    print("=" * 70)
+    print()
+    
+    try:
+        metrics = run_portfolio_backtest(cfg, return_portfolios=plot)
+        
+        train_start, train_end = metrics["train_window"]
+        print(f"\nTrain metrics ({train_start.date()} -> {train_end.date()})")
+        _print_metrics(metrics["train"])
+        
+        if "validation" in metrics:
+            val_start, val_end = metrics["validation_window"]
+            print(f"\nValidation metrics ({val_start.date()} -> {val_end.date()})")
+            _print_metrics(metrics["validation"])
+            print(f"\nBenchmark (Equal Weight) ({val_start.date()} -> {val_end.date()})")
+            _print_metrics(metrics["benchmark"])
+        
+        # Generate plots if requested
+        if plot:
+            if plot_dir:
+                plot_dir.mkdir(parents=True, exist_ok=True)
+                print(f"\nGenerating plots in {plot_dir}...")
+            else:
+                print("\nGenerating plots (displaying interactively)...")
+            
+            # Plot equity curves (Train vs Validation)
+            if "val_portfolio" in metrics:
+                # Create pseudo-close prices (normalized portfolio value) for plotting
+                train_value = metrics["train_portfolio"].value()
+                val_value = metrics["val_portfolio"].value()
+                
+                portfolios_dict = {
+                    "Train": metrics["train_portfolio"],
+                    "Validation": metrics["val_portfolio"],
+                }
+                # Use portfolio values as "close" for plotting relative performance
+                close_dict = {
+                    "Train": train_value,
+                    "Validation": val_value,
+                }
+                
+                save_path = (plot_dir / "portfolio_equity.png") if plot_dir else None
+                plot_equity_curves(
+                    portfolios_dict,
+                    close_dict,
+                    title=f"Portfolio Equity - Top {cfg.portfolio.top_k} RSI Strategy",
+                    save_path=save_path,
+                )
+                if plot_dir:
+                    print("  ✓ Saved portfolio_equity.png")
+                
+                # Plot drawdowns (Validation)
+                save_path = (plot_dir / "portfolio_drawdowns.png") if plot_dir else None
+                plot_drawdowns(
+                    metrics["val_portfolio"],
+                    val_value,
+                    cfg.backtest.freq,
+                    title="Portfolio Drawdowns (Validation)",
+                    save_path=save_path,
+                )
+                if plot_dir:
+                    print("  ✓ Saved portfolio_drawdowns.png")
+            
+            if not plot_dir:
+                print("\nPlots displayed. Close windows to continue.")
+                try:
+                    import matplotlib.pyplot as plt
+                    plt.show()
+                except Exception:
+                    pass
+                    
+    except Exception as e:
+        print(f"\nError running portfolio backtest: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def cmd_portfolio_grid(cfg: WorkflowConfig, top: int, output: Path):
+    """Run portfolio-level grid search."""
+    print("=" * 70)
+    print("PORTFOLIO GRID SEARCH")
+    print("=" * 70)
+    
+    if not cfg.portfolio:
+        print("Error: Portfolio config required.")
+        return
+
+    if not cfg.portfolio.grid:
+        print("Error: No portfolio grid defined in config (portfolio.grid).")
+        return
+
+    try:
+        results = run_portfolio_grid_search(cfg)
+        if not results:
+            print("No results found.")
+            return
+
+        df = pd.DataFrame(results)
+        
+        # Determine sort metric
+        sort_metric = cfg.grid.metric if cfg.grid.metric in df.columns else "sharpe_ratio"
+        if sort_metric not in df.columns:
+             # Fallback to first numeric col
+             numerics = df.select_dtypes(include='number').columns
+             if len(numerics) > 0:
+                 sort_metric = numerics[0]
+
+        df = df.sort_values(sort_metric, ascending=False)
+        
+        print(f"\nTop {top} Results (sorted by {sort_metric}):")
+        print(df.head(top))
+        
+        if output:
+            saved_path = save_grid_results(results, output, sort_by=sort_metric)
+            print(f"\nSaved full results to {saved_path}")
+
+    except Exception as e:
+        print(f"\nError running portfolio grid search: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def _print_metrics(metrics: dict):
     for key, value in metrics.items():
         print(f"  {key}: {value}")
@@ -245,6 +393,10 @@ def main():
         cmd_backtest(cfg, refresh=args.refresh, plot=args.plot, plot_dir=args.plot_dir)
     elif args.command == "grid":
         cmd_grid(cfg, refresh=args.refresh, top=args.top, output=args.output, n_jobs=args.n_jobs)
+    elif args.command == "portfolio":
+        cmd_portfolio(cfg, plot=args.plot, plot_dir=args.plot_dir)
+    elif args.command == "portfolio-grid":
+        cmd_portfolio_grid(cfg, top=args.top, output=args.output)
     else:
         parser.error("Unknown command")
 
