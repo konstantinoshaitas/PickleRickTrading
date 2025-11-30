@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -203,6 +203,116 @@ def compute_metrics(portfolio: vbt.Portfolio, close: pd.Series, freq: str) -> Di
     }
     
     return metrics
+
+
+def compute_batch_metrics(
+    portfolio: vbt.Portfolio, 
+    close: pd.Series, 
+    freq: str,
+    param_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Extract metrics for all parameter combos from a batched portfolio.
+    
+    This is the vectorized version of compute_metrics() that processes
+    all parameter combinations at once using vectorbt's batch methods.
+    
+    Args:
+        portfolio: Multi-column vbt.Portfolio from batched backtest
+        close: Price series used for time calculations
+        freq: Frequency string (e.g., 'D' for daily)
+        param_df: DataFrame with parameter columns to include in results
+        
+    Returns:
+        DataFrame with all metrics for each parameter combination
+    """
+    # Calculate years for trades_per_year
+    years = max((close.index[-1] - close.index[0]).days / 365.25, 1e-9)
+    
+    # Core return metrics (vectorized)
+    total_returns = portfolio.total_return()
+    annualized_returns = portfolio.annualized_return(freq=freq)
+    max_drawdowns = portfolio.max_drawdown()
+    volatilities = portfolio.annualized_volatility(freq=freq)
+    sharpe_ratios = portfolio.sharpe_ratio(freq=freq)
+    sortino_ratios = portfolio.sortino_ratio(freq=freq)
+    
+    # Advanced ratios with error handling
+    try:
+        info_ratios = portfolio.information_ratio(freq=freq)
+    except Exception:
+        info_ratios = pd.Series(np.nan, index=total_returns.index)
+    try:
+        tail_ratios = portfolio.tail_ratio(freq=freq)
+    except Exception:
+        tail_ratios = pd.Series(np.nan, index=total_returns.index)
+    try:
+        deflated_sharpes = portfolio.deflated_sharpe_ratio(freq=freq)
+    except Exception:
+        deflated_sharpes = pd.Series(np.nan, index=total_returns.index)
+    
+    # Ulcer Index (vectorized via drawdown)
+    ulcer_indices = (portfolio.drawdown().pow(2).mean()) ** 0.5
+    
+    # Calmar Ratio
+    calmar_ratios = annualized_returns / max_drawdowns.abs()
+    calmar_ratios = calmar_ratios.replace([np.inf, -np.inf], np.nan)
+    
+    # Trade metrics (vectorized)
+    trades = portfolio.trades
+    total_trades = trades.count()
+    trades_per_year = total_trades / years
+    
+    # Win rate, profit factor, expectancy (vectorized)
+    win_rates = (trades.win_rate() * 100).fillna(0.0)
+    profit_factors = trades.profit_factor().replace([np.inf, -np.inf], np.nan)
+    expectancies = trades.expectancy().fillna(0.0)
+    
+    # Average win/loss amounts
+    avg_wins = trades.winning.pnl.mean().fillna(0.0)
+    avg_losses = trades.losing.pnl.mean().abs().fillna(0.0)
+    
+    # Payoff ratio
+    payoff_ratios = (avg_wins / avg_losses).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    
+    # Winning/Losing streaks
+    try:
+        winning_streaks = trades.winning_streak.max().fillna(0)
+    except Exception:
+        winning_streaks = pd.Series(0, index=total_returns.index)
+    try:
+        losing_streaks = trades.losing_streak.max().fillna(0)
+    except Exception:
+        losing_streaks = pd.Series(0, index=total_returns.index)
+    
+    # Build results DataFrame
+    metrics_df = pd.DataFrame({
+        "total_return": total_returns.values,
+        "annualized_return": annualized_returns.values,
+        "max_drawdown": max_drawdowns.values,
+        "volatility": volatilities.values,
+        "sharpe_ratio": sharpe_ratios.values,
+        "sortino_ratio": sortino_ratios.values,
+        "calmar_ratio": calmar_ratios.values,
+        "information_ratio": info_ratios.values if hasattr(info_ratios, 'values') else info_ratios,
+        "tail_ratio": tail_ratios.values if hasattr(tail_ratios, 'values') else tail_ratios,
+        "deflated_sharpe_ratio": deflated_sharpes.values if hasattr(deflated_sharpes, 'values') else deflated_sharpes,
+        "ulcer_index": ulcer_indices.values,
+        "total_trades": total_trades.values,
+        "trades_per_year": trades_per_year.values,
+        "win_rate": win_rates.values,
+        "profit_factor": profit_factors.values,
+        "expectancy": expectancies.values,
+        "avg_win_amount": avg_wins.values,
+        "avg_loss_amount": avg_losses.values,
+        "payoff_ratio": payoff_ratios.values,
+        "winning_streak": winning_streaks.values,
+        "losing_streak": losing_streaks.values,
+    })
+    
+    # Prepend parameter columns
+    result_df = pd.concat([param_df.reset_index(drop=True), metrics_df], axis=1)
+    
+    return result_df
 
 
 def buy_and_hold(close: pd.Series, config) -> Dict[str, float]:

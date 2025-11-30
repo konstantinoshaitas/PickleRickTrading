@@ -2,7 +2,8 @@
 
 from .config import BacktestConfig, DataConfig, StrategyConfig, WorkflowConfig, load_config
 from .data import DataFetcher, split_train_val
-from .metrics import buy_and_hold, compute_metrics
+from .grid import GridSearch, VectorizedGridSearch
+from .metrics import buy_and_hold, compute_batch_metrics, compute_metrics
 from .pipeline import (
     load_prices,
     run_grid_search,
@@ -11,8 +12,10 @@ from .pipeline import (
 )
 from .strategies import (
     EnsembleStrategy,
+    EnsembleUnconstrainedStrategy,
     StrategyFactory,
     TripleEMAStrategy,
+    TripleEMAUnconstrainedStrategy,
     TripleMACDStrategy,
 )
 from .visualization import (
@@ -32,11 +35,16 @@ __all__ = [
     "DataFetcher",
     "split_train_val",
     "compute_metrics",
+    "compute_batch_metrics",
     "buy_and_hold",
+    "GridSearch",
+    "VectorizedGridSearch",
     "StrategyFactory",
     "TripleEMAStrategy",
+    "TripleEMAUnconstrainedStrategy",
     "TripleMACDStrategy",
     "EnsembleStrategy",
+    "EnsembleUnconstrainedStrategy",
     "load_prices",
     "run_single_backtest",
     "run_grid_search",

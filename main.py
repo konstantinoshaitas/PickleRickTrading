@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     grid.add_argument("--top", type=int, default=5, help="Rows to display from sorted results")
     grid.add_argument("--output", type=Path, default=Path("data/grid_results.parquet"), help="Parquet file path for results (default: .parquet)")
     grid.add_argument("--n-jobs", type=int, default=None, help="Number of parallel processes (default: CPU count - 1)")
+    grid.add_argument("--min-trades", type=float, default=0.5, help="Minimum trades per year filter (default: 0.5)")
     
     portfolio = sub.add_parser("portfolio", help="Run multi-asset portfolio backtest")
     portfolio.add_argument("--plot", action="store_true", help="Generate visualization plots")
@@ -213,9 +214,9 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 pass
 
 
-def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path, n_jobs: Optional[int] = None):
+def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Path, n_jobs: Optional[int] = None, min_trades: float = 0.5):
     close, _ = load_prices(cfg, force_download=refresh)
-    search = run_grid_search(cfg, close, n_jobs=n_jobs)
+    search = run_grid_search(cfg, close, n_jobs=n_jobs, min_trades_per_year=min_trades)
     df = pd.DataFrame(search.results)
     if df.empty:
         print("Grid search produced no valid results.")
@@ -392,7 +393,7 @@ def main():
     elif args.command == "backtest":
         cmd_backtest(cfg, refresh=args.refresh, plot=args.plot, plot_dir=args.plot_dir)
     elif args.command == "grid":
-        cmd_grid(cfg, refresh=args.refresh, top=args.top, output=args.output, n_jobs=args.n_jobs)
+        cmd_grid(cfg, refresh=args.refresh, top=args.top, output=args.output, n_jobs=args.n_jobs, min_trades=args.min_trades)
     elif args.command == "portfolio":
         cmd_portfolio(cfg, plot=args.plot, plot_dir=args.plot_dir)
     elif args.command == "portfolio-grid":

@@ -12,7 +12,7 @@ import pandas as pd
 from .backtest import BacktestEngine, PortfolioBuilder
 from .config import WorkflowConfig
 from .data import DataFetcher, load_multi_asset_prices, split_train_val
-from .grid import GridSearch
+from .grid import GridSearch, VectorizedGridSearch
 from .metrics import buy_and_hold, compute_metrics
 from .strategies import StrategyFactory
 from .strategies.rsi_filter_portfolio import RSIFilterPortfolioStrategy
@@ -82,15 +82,61 @@ def run_single_backtest(cfg: WorkflowConfig, close: pd.Series, return_portfolios
     return outputs
 
 
-def run_grid_search(cfg: WorkflowConfig, close: pd.Series, n_jobs: Optional[int] = None):
-    """Execute brute-force grid search on the training slice."""
+def run_grid_search(
+    cfg: WorkflowConfig, 
+    close: pd.Series, 
+    n_jobs: Optional[int] = None,
+    use_vectorized: bool = True,
+    batch_size: int = 5000,
+    min_trades_per_year: float = 0.5
+):
+    """Execute grid search on the training slice.
+    
+    Args:
+        cfg: Workflow configuration
+        close: Price series
+        n_jobs: Number of CPU cores to use (default: all - 1)
+        use_vectorized: Use vectorized grid search for supported strategies (default: True)
+        batch_size: Batch size for vectorized search (default: 5000)
+        min_trades_per_year: Minimum trades per year filter for vectorized search (default: 2.0)
+        
+    Returns:
+        GridSearch or VectorizedGridSearch object with results
+        
+    Note:
+        Vectorized search is ~10-20x faster but only supports:
+        - triple_ema
+        - triple_ema_unconstrained
+        - triple_macd
+        - ensemble
+        - ensemble_unconstrained
+        
+        For other strategies, falls back to multiprocessing-based GridSearch.
+    """
     if not cfg.strategy.grid:
         raise ValueError("No grid defined in config.")
+    
     train_close, _ = split_train_val(close, cfg.backtest.train_ratio)
     engine = BacktestEngine(cfg.backtest)
-    strategy_cls = StrategyFactory[cfg.strategy.name]
     
-    search = GridSearch(engine, strategy_cls, n_jobs=n_jobs)
+    # Check if vectorized search is available for this strategy
+    vectorized_strategies = VectorizedGridSearch.SUPPORTED_STRATEGIES
+    
+    if use_vectorized and cfg.strategy.name in vectorized_strategies:
+        print(f"Using VectorizedGridSearch for '{cfg.strategy.name}' strategy...")
+        search = VectorizedGridSearch(
+            engine=engine,
+            strategy_name=cfg.strategy.name,
+            batch_size=batch_size,
+            n_jobs=n_jobs,
+            min_trades_per_year=min_trades_per_year
+        )
+    else:
+        if use_vectorized and cfg.strategy.name not in vectorized_strategies:
+            print(f"Note: Strategy '{cfg.strategy.name}' not supported for vectorization. Using GridSearch.")
+        strategy_cls = StrategyFactory[cfg.strategy.name]
+        search = GridSearch(engine, strategy_cls, n_jobs=n_jobs)
+    
     search.run(train_close, cfg.strategy.grid, cfg.strategy.params)
     return search
 

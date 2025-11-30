@@ -21,8 +21,8 @@ strategy:
     # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
     # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)
     ema_fast: "2:80:2" 
-    ema_mid: "40:200:2"   
-    ema_slow: "60:300:2"   
+    ema_mid: "40:200:1"   
+    ema_slow: "60:300:1"   
     # fastperiod: "5:75:5"   
     # slowperiod: "25:100:5"
     # signalperiod: "5:100:5"
