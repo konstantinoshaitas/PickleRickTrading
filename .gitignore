@@ -17,7 +17,12 @@ env/
 # Data files (cached/generated)
 data/cache/
 data/*.csv
+data/*.parquet
 !data/.gitkeep
+
+# Results files (large parquet files)
+*.parquet
+assets/**/results/*.parquet
 
 # Jupyter Notebook
 .ipynb_checkpoints/

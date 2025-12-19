@@ -1,0 +1,32 @@
+data:
+  ticker: ETH
+  start: '2018-01-01'
+  end:
+  interval: 1d
+  data_source: alphavantage  # Options: "yfinance" or "alphavantage"
+  asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
+  local_csv:
+  cache_csv: data/cache/ETH_1D.csv
+
+strategy:
+  name: macd
+  params:  
+    fastperiod: 20
+    slowperiod: 27
+    signalperiod: 28
+    
+  grid: 
+    fastperiod: "4:100:1"   
+    slowperiod: "30:200:1"
+    signalperiod: "6:200:1"
+
+backtest:
+  init_cash: 100000
+  fees: 0.0004
+  slippage: 0.0002
+  freq: D
+  train_ratio: 0.6
+
+grid:
+  metric: sharpe_ratio
+  top_n: 3

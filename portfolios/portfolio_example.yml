@@ -1,0 +1,120 @@
+data:
+  start: '2018-01-01'
+  interval: 1d
+  data_source: yfinance
+
+strategy:
+  # Default strategy if not overridden in 'assets'
+  name: ensemble
+  params:
+    ema_fast: 21
+    ema_mid: 55
+    ema_slow: 200
+    fastperiod: 12
+    slowperiod: 26
+    signalperiod: 9
+
+backtest:
+  init_cash: 100000
+  fees: 0.004
+  slippage: 0.001
+  freq: D
+  train_ratio: 0.6
+
+grid:
+  metric: sharpe_ratio
+
+portfolio:
+  tickers:
+    - AMZN
+    - BTC
+    - ETH
+    # - AAPL
+    - SOL
+    - META
+    - VOO
+    - GOOG
+    # - MSFT 
+    # - AMZN
+    - GLD
+  safe_haven_ticker: GLD
+  
+  # Default portfolio parameters
+  rsi_period: 60
+  rsi_threshold: 50.0
+  top_k: 3
+
+  # Portfolio grid search parameters
+  grid:
+    rsi_threshold: "40:60:1"
+    top_k: "1:6:1"
+    rsi_period: "10:110:1"
+
+  # Per-asset strategy overrides
+  # Example: cache_csv: data/cache/custom_BTC_path.csv
+  assets:
+    BTC:
+      strategy: ensemble_unconstrained  
+      params:
+        ema_fast: 4
+        ema_mid: 65 
+        ema_slow: 120
+        fastperiod: 59
+        slowperiod: 126
+        signalperiod: 39
+      # cache_csv: data/cache/custom_BTC_path.csv  # Optional: override auto-detected cache path
+    ETH:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 16
+        ema_mid: 191
+        ema_slow: 67
+        fastperiod: 4
+        slowperiod: 45
+        signalperiod: 63
+    
+    AMZN:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 73
+        ema_mid: 31
+        ema_slow: 65
+        fastperiod: 53
+        slowperiod: 55
+        signalperiod: 14
+    SOL:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 6
+        ema_mid: 29
+        ema_slow: 73
+        fastperiod: 28
+        slowperiod: 35
+        signalperiod: 15 
+    META:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 6
+        ema_mid: 99
+        ema_slow: 71
+        fastperiod: 53
+        slowperiod: 55
+        signalperiod: 6 
+    VOO:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 2
+        ema_mid: 207 
+        ema_slow: 99
+        fastperiod: 20
+        slowperiod: 72
+        signalperiod: 28
+    GOOG:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 7
+        ema_mid: 73 
+        ema_slow: 217
+        fastperiod: 85
+        slowperiod: 92
+        signalperiod: 7

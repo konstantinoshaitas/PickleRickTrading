@@ -333,3 +333,98 @@ def plot_cumulative_equity(
     
     return fig
 
+
+def plot_full_sample_equity(
+    train_portfolio: vbt.Portfolio,
+    val_portfolio: vbt.Portfolio,
+    train_close: pd.Series,
+    val_close: pd.Series,
+    full_close: pd.Series,
+    strategy_name: str = "",
+    strategy_params: Optional[Dict] = None,
+    save_path: Optional[Path] = None,
+) -> plt.Figure:
+    """Plot equity curves with full sample, train, validation, and buy & hold comparison.
+    
+    Creates a chart similar to the notebook's equity curve visualization showing:
+    - Full Sample (black): Strategy performance over entire period
+    - Train (blue): In-sample performance
+    - Validation (orange): Out-of-sample performance
+    - Buy & Hold (gray dashed): Benchmark comparison
+    - Train/Val Split (red dashed): Vertical line marking the split
+    
+    Args:
+        train_portfolio: vectorbt Portfolio for training period
+        val_portfolio: vectorbt Portfolio for validation period
+        train_close: Price series for training period
+        val_close: Price series for validation period
+        full_close: Price series for full period (used for buy & hold)
+        strategy_name: Optional strategy name for title
+        strategy_params: Optional dict of strategy params for title
+        save_path: Optional path to save the figure
+        
+    Returns:
+        matplotlib Figure object
+    """
+    fig, ax = plt.subplots(figsize=(14, 7))
+    
+    # Calculate equity curves
+    train_ret = train_portfolio.returns()
+    val_ret = val_portfolio.returns()
+    
+    train_eq = (1 + train_ret).cumprod()
+    val_eq = (1 + val_ret).cumprod()
+    
+    # Create full sample equity curve by chaining train and validation
+    # Validation starts where train ended (multiply by train's final value)
+    train_final = train_eq.iloc[-1] if len(train_eq) > 0 else 1.0
+    val_eq_chained = val_eq * train_final
+    
+    # Combine into full sample
+    full_eq = pd.concat([train_eq, val_eq_chained])
+    
+    # Calculate buy & hold equity curve
+    full_returns = full_close.pct_change().fillna(0.0)
+    bh_eq = (1 + full_returns).cumprod()
+    
+    # Plot Full Sample (black, thickest line)
+    ax.plot(full_eq.index, full_eq.values, 
+            label='Full Sample', color='black', linewidth=2.5)
+    
+    # Plot Train (blue)
+    ax.plot(train_eq.index, train_eq.values, 
+            label='Train (In-Sample)', color='blue', linewidth=1.5, alpha=0.8)
+    
+    # Plot Validation (orange) - using chained values for continuity
+    ax.plot(val_eq_chained.index, val_eq_chained.values, 
+            label='Validation (Out-of-Sample)', color='orange', linewidth=1.5, alpha=0.8)
+    
+    # Plot Buy & Hold (gray dashed)
+    ax.plot(bh_eq.index, bh_eq.values, 
+            label='Buy & Hold', color='gray', linewidth=1.5, linestyle='--', alpha=0.7)
+    
+    # Add vertical line at train/val split
+    split_date = train_close.index[-1]
+    ax.axvline(x=split_date, color='red', linestyle='--', alpha=0.5, linewidth=1.5, 
+               label='Train/Val Split')
+    
+    # Build title
+    if strategy_params:
+        param_str = ', '.join(f'{k}={v}' for k, v in strategy_params.items())
+        title = f"Best {strategy_name}({param_str}) - Equity Curves"
+    elif strategy_name:
+        title = f"{strategy_name} - Equity Curves"
+    else:
+        title = "Equity Curves (Full Sample)"
+    
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylabel('Cumulative Returns (normalized to 1)', fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best')
+    plt.tight_layout()
+    
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    
+    return fig

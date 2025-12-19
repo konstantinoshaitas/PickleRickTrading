@@ -2,46 +2,53 @@
 
 from __future__ import annotations
 
+import gc
 import itertools
 import multiprocessing as mp
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import vectorbt as vbt
 
 from .backtest import BacktestEngine
 from .config import BacktestConfig
-from .metrics import compute_metrics
+from .metrics import compute_batch_metrics, compute_metrics
 from .strategies import StrategyFactory
 
 
-def _validate_params_static(params: Dict[str, int]) -> bool:
+def _validate_params_static(params: Dict[str, int], strategy_name: str = "") -> bool:
     """Static validation function for parameter combinations.
     
     Can be called from both main process and worker processes.
     
+    Args:
+        params: Parameter dictionary
+        strategy_name: Strategy name (used for unconstrained strategies)
+    
     Returns True if parameters are valid, False otherwise.
     """
-    # Triple EMA validation: ema_fast < ema_mid < ema_slow
-    if "ema_fast" in params and "ema_mid" in params and "ema_slow" in params:
-        if not (params["ema_fast"] < params["ema_mid"] < params["ema_slow"]):
-            return False
+    # Unconstrained strategies skip EMA ordering validation
+    is_unconstrained = "unconstrained" in strategy_name.lower()
     
-    # MACD validation: fastperiod < slowperiod
+    # Triple EMA validation: ema_fast < ema_mid < ema_slow (skip for unconstrained)
+    if not is_unconstrained:
+        if "ema_fast" in params and "ema_mid" in params and "ema_slow" in params:
+            if not (params["ema_fast"] < params["ema_mid"] < params["ema_slow"]):
+                return False
+    
+    # MACD validation: fastperiod < slowperiod (always required for MACD to work)
     if "fastperiod" in params and "slowperiod" in params:
         if not (params["fastperiod"] < params["slowperiod"]):
             return False
     
-    # Ensemble validation: both EMA and MACD constraints must be satisfied
-    # (handled by the checks above)
-    
     return True
 
 
-def _is_valid_combo(combo: Tuple, keys: List[str]) -> bool:
+def _is_valid_combo(combo: Tuple, keys: List[str], strategy_name: str = "") -> bool:
     """Check if a parameter combination is valid using static validation."""
     params_dict = dict(zip(keys, combo))
-    return _validate_params_static(params_dict)
+    return _validate_params_static(params_dict, strategy_name)
 
 
 def _run_single_backtest_worker(args: Tuple) -> Optional[Dict]:
@@ -96,6 +103,12 @@ class GridSearch:
         self.strategy_cls = strategy_cls
         self.results: List[Dict] = []
         self.n_jobs = n_jobs or max(1, mp.cpu_count() - 1)  # Leave 1 core free
+        
+        # Get strategy name from StrategyFactory (reverse lookup)
+        self.strategy_name = next(
+            (key for key, cls in StrategyFactory.items() if cls == strategy_cls),
+            strategy_cls.__name__
+        )
     
     def run(
         self, 
@@ -120,9 +133,9 @@ class GridSearch:
         # Use generator to avoid materializing all combinations in memory
         all_combos = itertools.product(*[grid[k] for k in keys])
         
-        # Pre-filter invalid combinations using NumPy
+        # Pre-filter invalid combinations (unconstrained strategies skip EMA ordering)
         print("Pre-filtering combinations...")
-        valid_combos = [combo for combo in all_combos if _is_valid_combo(combo, keys)]
+        valid_combos = [combo for combo in all_combos if _is_valid_combo(combo, keys, self.strategy_name)]
         total_valid = len(valid_combos)
         print(f"Found {total_valid:,} valid combinations (from {total_possible:,} total)")
         
@@ -225,6 +238,687 @@ class GridSearch:
         return _validate_params_static(params)
     
     def best(self, metric: str):
+        if not self.results:
+            raise ValueError("Run grid search first.")
+        df = pd.DataFrame(self.results)
+        return df.sort_values(metric, ascending=False).iloc[0]
+
+
+def _run_vectorized_batch_worker(args: Tuple) -> Optional[pd.DataFrame]:
+    """Worker function for multiprocessing - runs a vectorized batch backtest.
+    
+    Args:
+        args: Tuple containing:
+            - batch_params: List of parameter tuples for this batch
+            - keys: Parameter names list
+            - close_values: Close price values (numpy array)
+            - close_index: Close price index (DatetimeIndex values)
+            - engine_config: BacktestConfig dict
+            - strategy_name: Strategy name string
+            - freq: Frequency string
+            - min_trades_per_year: Minimum trades per year filter
+    
+    Returns:
+        DataFrame with metrics for valid parameter combinations, or None if failed
+    """
+    (batch_params, keys, close_values, close_index, 
+     engine_config, strategy_name, freq, min_trades_per_year) = args
+    
+    try:
+        # Reconstruct close Series
+        close = pd.Series(close_values, index=pd.DatetimeIndex(close_index))
+        batch_size = len(batch_params)
+        
+        # Unzip parameters
+        param_lists = list(zip(*batch_params))
+        param_dict = dict(zip(keys, param_lists))
+        
+        # Standardize column names
+        common_cols = pd.Index(range(batch_size), name='combo_id')
+        
+        # Compute indicators based on strategy type
+        # Note: unconstrained strategies use the same signal logic, just without param ordering
+        if strategy_name in ("triple_ema", "triple_ema_unconstrained"):
+            entries, exits = _compute_ema_signals_batch(
+                close, 
+                list(param_dict['ema_fast']),
+                list(param_dict['ema_mid']),
+                list(param_dict['ema_slow']),
+                common_cols
+            )
+        elif strategy_name == "macd":
+            entries, exits = _compute_macd_signals_batch(
+                close,
+                list(param_dict['fastperiod']),
+                list(param_dict['slowperiod']),
+                list(param_dict['signalperiod']),
+                common_cols
+            )
+        elif strategy_name in ("ensemble", "ensemble_unconstrained"):
+            entries, exits = _compute_ensemble_signals_batch(
+                close,
+                list(param_dict['ema_fast']),
+                list(param_dict['ema_mid']),
+                list(param_dict['ema_slow']),
+                list(param_dict['fastperiod']),
+                list(param_dict['slowperiod']),
+                list(param_dict['signalperiod']),
+                common_cols
+            )
+        else:
+            return None
+        
+        # Run batch backtest
+        pf = vbt.Portfolio.from_signals(
+            close=close,
+            entries=entries,
+            exits=exits,
+            init_cash=engine_config['init_cash'],
+            fees=engine_config['fees'],
+            slippage=engine_config['slippage'],
+            freq=freq
+        )
+        
+        # Build parameter DataFrame
+        param_df = pd.DataFrame({k: list(v) for k, v in param_dict.items()})
+        
+        # Compute batch metrics
+        result_df = compute_batch_metrics(pf, close, freq, param_df)
+        
+        # Filter by minimum trades per year
+        if min_trades_per_year > 0:
+            result_df = result_df[result_df['trades_per_year'] >= min_trades_per_year]
+        
+        return result_df
+        
+    except Exception as e:
+        print(f"Batch worker error: {e}")
+        return None
+
+
+def _compute_ema_signals_batch(
+    close: pd.Series,
+    ema_fast_list: List[int],
+    ema_mid_list: List[int],
+    ema_slow_list: List[int],
+    common_cols: pd.Index
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute Triple EMA signals for a batch of parameters."""
+    # Vectorized EMA computation
+    ema1 = vbt.MA.run(close, ema_fast_list, ewm=True)
+    ema2 = vbt.MA.run(close, ema_mid_list, ewm=True)
+    ema3 = vbt.MA.run(close, ema_slow_list, ewm=True)
+    
+    # Standardize column names
+    df_ema1 = ema1.ma.copy()
+    df_ema1.columns = common_cols
+    df_ema2 = ema2.ma.copy()
+    df_ema2.columns = common_cols
+    df_ema3 = ema3.ma.copy()
+    df_ema3.columns = common_cols
+    
+    # Crossover signals (OR logic)
+    c1 = df_ema1.vbt.crossed_above(df_ema2)
+    c2 = df_ema1.vbt.crossed_above(df_ema3)
+    c3 = df_ema2.vbt.crossed_above(df_ema3)
+    entries_raw = c1 | c2 | c3
+    
+    d1 = df_ema1.vbt.crossed_below(df_ema2)
+    d2 = df_ema1.vbt.crossed_below(df_ema3)
+    d3 = df_ema2.vbt.crossed_below(df_ema3)
+    exits_raw = d1 | d2 | d3
+    
+    # Shift to avoid lookahead bias
+    entries = entries_raw.shift(1).fillna(False).astype(bool)
+    exits = exits_raw.shift(1).fillna(False).astype(bool)
+    
+    return entries, exits
+
+
+def _compute_macd_signals_batch(
+    close: pd.Series,
+    fast_list: List[int],
+    slow_list: List[int],
+    signal_list: List[int],
+    common_cols: pd.Index
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute Triple MACD signals for a batch of parameters."""
+    # Vectorized MACD computation
+    macd = vbt.MACD.run(
+        close,
+        fast_window=fast_list,
+        slow_window=slow_list,
+        signal_window=signal_list
+    )
+    
+    # Standardize column names
+    macd_line = macd.macd.copy()
+    macd_line.columns = common_cols
+    signal_line = macd.signal.copy()
+    signal_line.columns = common_cols
+    
+    # Crossover signals
+    entries_raw = macd_line.vbt.crossed_above(signal_line)
+    exits_raw = macd_line.vbt.crossed_below(signal_line)
+    
+    # Shift to avoid lookahead bias
+    entries = entries_raw.shift(1).fillna(False).astype(bool)
+    exits = exits_raw.shift(1).fillna(False).astype(bool)
+    
+    return entries, exits
+
+
+def _compute_ensemble_signals_batch(
+    close: pd.Series,
+    ema_fast_list: List[int],
+    ema_mid_list: List[int],
+    ema_slow_list: List[int],
+    fast_list: List[int],
+    slow_list: List[int],
+    signal_list: List[int],
+    common_cols: pd.Index
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute Ensemble (EMA + MACD with OR logic) signals for a batch."""
+    # Get EMA signals
+    ema_entries, ema_exits = _compute_ema_signals_batch(
+        close, ema_fast_list, ema_mid_list, ema_slow_list, common_cols
+    )
+    
+    # Get MACD signals
+    macd_entries, macd_exits = _compute_macd_signals_batch(
+        close, fast_list, slow_list, signal_list, common_cols
+    )
+    
+    # Combine with OR logic
+    entries = ema_entries | macd_entries
+    exits = ema_exits | macd_exits
+    
+    return entries, exits
+
+
+class VectorizedPortfolioGridSearch:
+    """Vectorized grid search for portfolio RSI/top-K parameters.
+    
+    This class pre-computes RSI for all period values and vectorizes the
+    threshold/top-K filtering to evaluate thousands of combinations efficiently.
+    
+    Args:
+        config: BacktestConfig instance
+        batch_size: Number of parameter combinations per batch (default: 500)
+    """
+    
+    def __init__(self, config: BacktestConfig, batch_size: int = 500):
+        self.config = config
+        self.batch_size = batch_size
+        self.results: List[Dict] = []
+    
+    def run(
+        self,
+        prices: pd.DataFrame,
+        ensemble_entries: pd.DataFrame,
+        ensemble_exits: pd.DataFrame,
+        grid: Dict[str, List],
+        safe_haven_ticker: str = "GLD",
+    ) -> List[Dict]:
+        """Run vectorized portfolio grid search.
+        
+        Args:
+            prices: Multi-asset price DataFrame (columns = assets, index = dates)
+            ensemble_entries: Entry signals DataFrame (columns = assets, index = dates)
+            ensemble_exits: Exit signals DataFrame (columns = assets, index = dates)
+            grid: Parameter grid with rsi_period, rsi_threshold, top_k
+            safe_haven_ticker: Safe haven ticker for risk-off allocation
+            
+        Returns:
+            List of metric dictionaries for each parameter combination
+        """
+        keys = list(grid.keys())
+        
+        # Get unique RSI periods to pre-compute
+        rsi_periods = grid.get('rsi_period', [14])
+        if not isinstance(rsi_periods, list):
+            rsi_periods = [rsi_periods]
+        
+        rsi_thresholds = grid.get('rsi_threshold', [50.0])
+        if not isinstance(rsi_thresholds, list):
+            rsi_thresholds = [rsi_thresholds]
+            
+        top_ks = grid.get('top_k', [5])
+        if not isinstance(top_ks, list):
+            top_ks = [top_ks]
+        
+        # Asset columns (excluding safe haven)
+        asset_columns = [col for col in prices.columns if col != safe_haven_ticker]
+        
+        # Pre-compute RSI for all periods and all assets
+
+        # RSI is calculated on cumulative returns (buy-and-hold returns) for cross-sectional momentum
+        print("Pre-computing RSI for all period values...")
+        rsi_cache = {}  # {period: DataFrame of RSI values}
+        
+        for period in rsi_periods:
+            rsi_df = pd.DataFrame(index=prices.index, columns=asset_columns)
+            for asset in asset_columns:
+                # Calculate cumulative returns (buy-and-hold returns)
+                cum_returns = (1 + prices[asset].pct_change()).cumprod()
+                # Calculate RSI on cumulative returns (not on prices)
+                rsi_series = vbt.RSI.run(cum_returns, window=period).rsi
+                rsi_df[asset] = rsi_series
+            rsi_cache[period] = rsi_df
+        
+        print(f"Cached RSI for {len(rsi_periods)} periods across {len(asset_columns)} assets")
+        
+        # Generate all combinations
+        all_combos = list(itertools.product(rsi_periods, rsi_thresholds, top_ks))
+        total = len(all_combos)
+        
+        print(f"Running portfolio grid search: {total} combinations (vectorized)")
+        print("-" * 50)
+        
+        # Process in batches
+        for batch_start in range(0, total, self.batch_size):
+            batch_end = min(batch_start + self.batch_size, total)
+            batch = all_combos[batch_start:batch_end]
+            
+            for combo in batch:
+                rsi_period, rsi_threshold, top_k = combo
+                
+                try:
+                    # Get pre-computed RSI
+                    rsi_df = rsi_cache[rsi_period]
+                    
+                    # Generate weights using vectorized logic
+                    weights = self._generate_weights_fast(
+                        prices=prices,
+                        rsi_df=rsi_df,
+                        ensemble_entries=ensemble_entries,
+                        ensemble_exits=ensemble_exits,
+                        rsi_threshold=rsi_threshold,
+                        top_k=top_k,
+                        safe_haven_ticker=safe_haven_ticker,
+                        asset_columns=asset_columns,
+                    )
+                    
+                    # Compute portfolio metrics
+                    metrics = self._compute_portfolio_metrics(prices, weights)
+                    
+                    # Add parameters
+                    metrics['rsi_period'] = rsi_period
+                    metrics['rsi_threshold'] = rsi_threshold
+                    metrics['top_k'] = top_k
+                    
+                    self.results.append(metrics)
+                    
+                except Exception as e:
+                    # Skip failed combinations silently
+                    pass
+            
+            # Progress update
+            processed = min(batch_end, total)
+            print(f"Progress: {processed}/{total} ({(processed/total)*100:.1f}%) - {len(self.results)} valid results")
+        
+        return self.results
+    
+    def _generate_weights_fast(
+        self,
+        prices: pd.DataFrame,
+        rsi_df: pd.DataFrame,
+        ensemble_entries: pd.DataFrame,
+        ensemble_exits: pd.DataFrame,
+        rsi_threshold: float,
+        top_k: int,
+        safe_haven_ticker: str,
+        asset_columns: List[str],
+    ) -> pd.DataFrame:
+        """Generate weights using optimized pandas operations."""
+        # Initialize weights
+        weights = pd.DataFrame(0.0, index=prices.index, columns=prices.columns)
+        
+        # Vectorized: RSI above threshold mask
+        above_threshold = rsi_df > rsi_threshold
+        
+        # Vectorized: RSI ranks (descending)
+        rsi_ranks = rsi_df.rank(axis=1, method='dense', ascending=False)
+        
+        # Vectorized: top-K mask
+        top_k_mask = rsi_ranks <= top_k
+        
+        # Combined qualifying mask: above threshold AND in top-K AND entry signal AND NOT exit signal
+        qualifying_mask = (
+            above_threshold & 
+            top_k_mask & 
+            ensemble_entries & 
+            ~ensemble_exits
+        )
+        
+        # Count qualifying assets per row
+        num_qualifying = qualifying_mask.sum(axis=1)
+        
+        # Weight per asset when qualifying
+        weight_per_asset = 1.0 / top_k
+        
+        # Assign weights to qualifying assets
+        for asset in asset_columns:
+            weights[asset] = qualifying_mask[asset].astype(float) * weight_per_asset
+        
+        # Calculate remaining weight for safe haven
+        allocated_weight = weights[asset_columns].sum(axis=1)
+        remaining_weight = 1.0 - allocated_weight
+        
+        # Safe haven gets 50% of remaining (other 50% is cash)
+        weights[safe_haven_ticker] = remaining_weight * 0.5
+        
+        # Handle NaN RSI rows (early dates): 50% safe haven
+        nan_mask = rsi_df.isna().any(axis=1)
+        weights.loc[nan_mask, asset_columns] = 0.0
+        weights.loc[nan_mask, safe_haven_ticker] = 0.5
+        
+        return weights
+    
+    def _compute_portfolio_metrics(
+        self, 
+        prices: pd.DataFrame, 
+        weights: pd.DataFrame
+    ) -> Dict:
+        """Compute portfolio metrics from weights."""
+        # Get common columns
+        common_cols = list(set(prices.columns) & set(weights.columns))
+        prices_aligned = prices[common_cols]
+        weights_aligned = weights[common_cols]
+        
+        # Asset returns
+        asset_returns = prices_aligned.pct_change().fillna(0.0)
+        
+        # Transaction costs
+        weight_changes = weights_aligned.diff().abs().fillna(0.0)
+        turnover = weight_changes.sum(axis=1) / 2
+        transaction_cost_rate = self.config.fees + self.config.slippage
+        transaction_costs = turnover * transaction_cost_rate
+        
+        # Portfolio returns
+        prev_weights = weights_aligned.shift(1).fillna(0.0)
+        portfolio_returns_gross = (asset_returns * prev_weights).sum(axis=1)
+        portfolio_returns = portfolio_returns_gross - transaction_costs
+        
+        # Portfolio value
+        portfolio_value = (1 + portfolio_returns).cumprod() * self.config.init_cash
+        portfolio_value.iloc[0] = self.config.init_cash
+        
+        # Compute metrics
+        n_periods = len(portfolio_value)
+        periods_per_year = 252 if self.config.freq.upper() in ("D", "1D") else 52
+        years = n_periods / periods_per_year
+        
+        total_return = (portfolio_value.iloc[-1] / portfolio_value.iloc[0]) - 1.0
+        ann_return = (1 + total_return) ** (1 / max(years, 0.01)) - 1 if years > 0 else 0.0
+        ann_vol = portfolio_returns.std() * np.sqrt(periods_per_year) if len(portfolio_returns) > 1 else 0.0
+        
+        # Max drawdown
+        peak = portfolio_value.cummax()
+        drawdown = (portfolio_value - peak) / peak
+        max_dd = float(drawdown.min())
+        
+        # Sharpe ratio
+        sharpe = ann_return / ann_vol if ann_vol > 0 else np.nan
+        
+        # Trade count (weight changes > 1%)
+        trade_mask = (weight_changes > 0.01).any(axis=1)
+        n_trades = int(trade_mask.sum())
+        trades_per_year = n_trades / max(years, 0.01) if years > 0 else 0.0
+        
+        # Win rate
+        positive_returns = (portfolio_returns > 0).sum()
+        win_rate = positive_returns / len(portfolio_returns) if len(portfolio_returns) > 0 else 0.0
+        
+        return {
+            'total_return': total_return,
+            'annualized_return': ann_return,
+            'annualized_volatility': ann_vol,
+            'sharpe_ratio': sharpe,
+            'max_drawdown': max_dd,
+            'n_trades': n_trades,
+            'trades_per_year': trades_per_year,
+            'win_rate': win_rate,
+        }
+    
+    def best(self, metric: str = "sharpe_ratio") -> pd.Series:
+        """Get the best parameter combination by specified metric."""
+        if not self.results:
+            raise ValueError("Run grid search first.")
+        df = pd.DataFrame(self.results)
+        return df.sort_values(metric, ascending=False).iloc[0]
+
+
+class VectorizedGridSearch:
+    """Vectorized grid search using vectorbt's batch processing capabilities.
+    
+    This class uses vectorbt's parameter broadcasting to compute thousands of
+    indicator combinations simultaneously, then runs batch backtests.
+    
+    Supports: triple_ema, triple_ema_unconstrained, macd, ensemble, ensemble_unconstrained.
+    
+    Args:
+        engine: BacktestEngine instance with configuration
+        strategy_name: Strategy name (see SUPPORTED_STRATEGIES)
+        batch_size: Number of parameter combinations per batch (default: 5000)
+        n_jobs: Number of CPU cores for multiprocessing (default: all - 1)
+        min_trades_per_year: Filter out strategies with fewer trades (default: 0.5)
+    """
+    
+    SUPPORTED_STRATEGIES = [
+        "triple_ema", 
+        "triple_ema_unconstrained",
+        "macd", 
+        "ensemble",
+        "ensemble_unconstrained",
+    ]
+    
+    def __init__(
+        self, 
+        engine: BacktestEngine, 
+        strategy_name: str,
+        batch_size: int = 5000,
+        n_jobs: Optional[int] = None,
+        min_trades_per_year: float = 0.5
+    ):
+        if strategy_name not in self.SUPPORTED_STRATEGIES:
+            raise ValueError(
+                f"Strategy '{strategy_name}' not supported for vectorization. "
+                f"Supported: {self.SUPPORTED_STRATEGIES}"
+            )
+        
+        self.engine = engine
+        self.strategy_name = strategy_name
+        self.batch_size = batch_size
+        self.n_jobs = n_jobs or max(1, mp.cpu_count() - 1)
+        self.min_trades_per_year = min_trades_per_year
+        self.results: List[Dict] = []
+    
+    def run(
+        self,
+        close: pd.Series,
+        grid: Dict[str, List[int]],
+        base_params: Dict[str, int],
+        use_multiprocessing: bool = True
+    ) -> List[Dict]:
+        """Run vectorized grid search.
+        
+        Args:
+            close: Price series
+            grid: Parameter grid dictionary
+            base_params: Base parameters (merged with grid params)
+            use_multiprocessing: Use multiprocessing for batch distribution
+            
+        Returns:
+            List of metric dictionaries for each valid parameter combination
+        """
+        keys = list(grid.keys())
+        
+        # Calculate total combinations
+        total_possible = int(np.prod([len(grid[k]) for k in keys]))
+        
+        # Generate all combinations
+        all_combos = list(itertools.product(*[grid[k] for k in keys]))
+        
+        # Pre-filter invalid combinations (unconstrained strategies skip EMA ordering)
+        print("Pre-filtering combinations...")
+        valid_combos = [combo for combo in all_combos if _is_valid_combo(combo, keys, self.strategy_name)]
+        total_valid = len(valid_combos)
+        print(f"Found {total_valid:,} valid combinations (from {total_possible:,} total)")
+        
+        if total_valid == 0:
+            print("No valid combinations to test.")
+            return []
+        
+        # Split into batches
+        num_batches = (total_valid + self.batch_size - 1) // self.batch_size
+        batches = [
+            valid_combos[i:i + self.batch_size] 
+            for i in range(0, total_valid, self.batch_size)
+        ]
+        
+        print(f"Processing {num_batches} batches of up to {self.batch_size} combinations...")
+        print(f"Strategy: {self.strategy_name} | Vectorization: ENABLED")
+        
+        # Prepare engine config for serialization
+        engine_config = {
+            'init_cash': self.engine.config.init_cash,
+            'fees': self.engine.config.fees,
+            'slippage': self.engine.config.slippage,
+            'freq': self.engine.config.freq,
+        }
+        
+        if use_multiprocessing and num_batches > 1 and self.n_jobs > 1:
+            self._run_multiprocessing(
+                batches, keys, close, engine_config, num_batches
+            )
+        else:
+            self._run_sequential(
+                batches, keys, close, engine_config, num_batches
+            )
+        
+        print(f"\nCompleted: {len(self.results):,} valid strategies found")
+        return self.results
+    
+    def _run_sequential(
+        self,
+        batches: List[List[Tuple]],
+        keys: List[str],
+        close: pd.Series,
+        engine_config: Dict,
+        num_batches: int
+    ):
+        """Process batches sequentially with vectorization."""
+        for batch_idx, batch_params in enumerate(batches):
+            try:
+                batch_size = len(batch_params)
+                print(f"Batch {batch_idx + 1}/{num_batches} ({batch_size} combinations)...")
+                
+                # Unzip parameters
+                param_lists = list(zip(*batch_params))
+                param_dict = dict(zip(keys, param_lists))
+                
+                # Standardize column names
+                common_cols = pd.Index(range(batch_size), name='combo_id')
+                
+                # Compute signals based on strategy
+                # Note: unconstrained strategies use the same signal logic, just without param ordering
+                if self.strategy_name in ("triple_ema", "triple_ema_unconstrained"):
+                    entries, exits = _compute_ema_signals_batch(
+                        close,
+                        list(param_dict['ema_fast']),
+                        list(param_dict['ema_mid']),
+                        list(param_dict['ema_slow']),
+                        common_cols
+                    )
+                elif self.strategy_name == "macd":
+                    entries, exits = _compute_macd_signals_batch(
+                        close,
+                        list(param_dict['fastperiod']),
+                        list(param_dict['slowperiod']),
+                        list(param_dict['signalperiod']),
+                        common_cols
+                    )
+                elif self.strategy_name in ("ensemble", "ensemble_unconstrained"):
+                    entries, exits = _compute_ensemble_signals_batch(
+                        close,
+                        list(param_dict['ema_fast']),
+                        list(param_dict['ema_mid']),
+                        list(param_dict['ema_slow']),
+                        list(param_dict['fastperiod']),
+                        list(param_dict['slowperiod']),
+                        list(param_dict['signalperiod']),
+                        common_cols
+                    )
+                
+                # Run batch backtest
+                pf = vbt.Portfolio.from_signals(
+                    close=close,
+                    entries=entries,
+                    exits=exits,
+                    init_cash=engine_config['init_cash'],
+                    fees=engine_config['fees'],
+                    slippage=engine_config['slippage'],
+                    freq=engine_config['freq']
+                )
+                
+                # Build parameter DataFrame
+                param_df = pd.DataFrame({k: list(v) for k, v in param_dict.items()})
+                
+                # Compute batch metrics
+                result_df = compute_batch_metrics(pf, close, engine_config['freq'], param_df)
+                
+                # Filter by minimum trades per year
+                if self.min_trades_per_year > 0:
+                    result_df = result_df[result_df['trades_per_year'] >= self.min_trades_per_year]
+                
+                # Convert to dict records and extend results
+                self.results.extend(result_df.to_dict('records'))
+                
+                print(f"  → {len(result_df)} valid strategies (total: {len(self.results)})")
+                
+                # Memory cleanup
+                del entries, exits, pf, param_df, result_df
+                gc.collect()
+                
+            except Exception as e:
+                print(f"Batch {batch_idx + 1} failed: {e}")
+                continue
+    
+    def _run_multiprocessing(
+        self,
+        batches: List[List[Tuple]],
+        keys: List[str],
+        close: pd.Series,
+        engine_config: Dict,
+        num_batches: int
+    ):
+        """Distribute batches across multiple CPU cores."""
+        print(f"Using {self.n_jobs} processes for parallel batch execution...")
+        
+        # Prepare serializable arguments for each batch
+        close_values = close.values
+        close_index = close.index.values
+        
+        args_list = [
+            (
+                batch_params, keys, close_values, close_index,
+                engine_config, self.strategy_name, engine_config['freq'],
+                self.min_trades_per_year
+            )
+            for batch_params in batches
+        ]
+        
+        completed = 0
+        with mp.Pool(processes=self.n_jobs) as pool:
+            for result_df in pool.imap_unordered(_run_vectorized_batch_worker, args_list):
+                completed += 1
+                if result_df is not None and len(result_df) > 0:
+                    self.results.extend(result_df.to_dict('records'))
+                print(f"Progress: {completed}/{num_batches} batches | {len(self.results)} valid strategies")
+    
+    def best(self, metric: str = "sharpe_ratio") -> pd.Series:
+        """Get the best parameter combination by specified metric."""
         if not self.results:
             raise ValueError("Run grid search first.")
         df = pd.DataFrame(self.results)

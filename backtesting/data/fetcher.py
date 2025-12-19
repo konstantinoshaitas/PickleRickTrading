@@ -517,7 +517,113 @@ class DataFetcher:
 
 
 def split_train_val(series: pd.Series, train_ratio: float) -> Tuple[pd.Series, pd.Series]:
+    """Split series into train and validation sets.
+    
+    Args:
+        series: Price series to split
+        train_ratio: Fraction of data for training (e.g., 0.6)
+        
+    Returns:
+        Tuple of (train_series, val_series)
+    """
     split_idx = int(len(series) * train_ratio)
     train = series.iloc[:split_idx].copy()
     val = series.iloc[split_idx:].copy()
     return train, val
+
+
+def split_train_val_test(
+    series: pd.Series,
+    train_ratio: float = 0.60,
+    val_ratio: float = 0.20,
+    test_ratio: float = 0.20,
+) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    """Split series into train, validation, and test sets.
+    
+    This is the recommended split for the 3-phase optimization pipeline:
+    - TRAIN: Grid search / optimization
+    - VALIDATION: Overfit filtering (check transfer)
+    - TEST: Sensitivity analysis (final confirmation)
+    
+    Args:
+        series: Price series to split
+        train_ratio: Fraction of data for training (default 0.60)
+        val_ratio: Fraction of data for validation (default 0.20)
+        test_ratio: Fraction of data for testing (default 0.20)
+        
+    Returns:
+        Tuple of (train_series, val_series, test_series)
+        
+    Raises:
+        ValueError: If ratios don't sum to ~1.0
+        
+    Example:
+        >>> train, val, test = split_train_val_test(prices, 0.6, 0.2, 0.2)
+        >>> # train: first 60% for grid search
+        >>> # val: middle 20% for overfit filtering
+        >>> # test: last 20% for sensitivity analysis
+    """
+    # Validate ratios
+    total = train_ratio + val_ratio + test_ratio
+    if abs(total - 1.0) > 0.01:
+        raise ValueError(
+            f"Ratios must sum to 1.0, got {total:.3f} "
+            f"(train={train_ratio}, val={val_ratio}, test={test_ratio})"
+        )
+    
+    n = len(series)
+    train_end = int(n * train_ratio)
+    val_end = int(n * (train_ratio + val_ratio))
+    
+    train = series.iloc[:train_end].copy()
+    val = series.iloc[train_end:val_end].copy()
+    test = series.iloc[val_end:].copy()
+    
+    return train, val, test
+
+
+def get_split_info(
+    series: pd.Series,
+    train_ratio: float = 0.60,
+    val_ratio: float = 0.20,
+    test_ratio: float = 0.20,
+) -> dict:
+    """Get information about the train/val/test split.
+    
+    Args:
+        series: Price series
+        train_ratio: Fraction for training
+        val_ratio: Fraction for validation
+        test_ratio: Fraction for testing
+        
+    Returns:
+        Dictionary with split details including:
+        - Date ranges for each split
+        - Number of bars in each split
+        - Actual ratios achieved
+    """
+    train, val, test = split_train_val_test(series, train_ratio, val_ratio, test_ratio)
+    
+    total = len(series)
+    
+    return {
+        "total_bars": total,
+        "train": {
+            "bars": len(train),
+            "ratio": len(train) / total,
+            "start": train.index[0] if len(train) > 0 else None,
+            "end": train.index[-1] if len(train) > 0 else None,
+        },
+        "val": {
+            "bars": len(val),
+            "ratio": len(val) / total,
+            "start": val.index[0] if len(val) > 0 else None,
+            "end": val.index[-1] if len(val) > 0 else None,
+        },
+        "test": {
+            "bars": len(test),
+            "ratio": len(test) / total,
+            "start": test.index[0] if len(test) > 0 else None,
+            "end": test.index[-1] if len(test) > 0 else None,
+        },
+    }

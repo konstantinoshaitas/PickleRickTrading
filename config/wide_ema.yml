@@ -1,0 +1,33 @@
+data:
+  ticker: ETH
+  start: '2018-01-01'
+  end:
+  interval: 1d
+  data_source: alphavantage  # Options: "yfinance" or "alphavantage"
+  asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
+  local_csv:
+  cache_csv: data/cache/ETH_1D.csv
+
+strategy:
+  name: triple_ema_unconstrained
+  params:  
+    ema_fast: 12
+    ema_mid: 22 
+    ema_slow: 82
+
+  grid:
+    ema_fast: "2:80:1" 
+    ema_mid: "15:215:2"   
+    ema_slow: "65:250:2"   
+
+
+backtest:
+  init_cash: 100000
+  fees: 0.0004
+  slippage: 0.0002
+  freq: D
+  train_ratio: 0.6
+
+grid:
+  metric: sharpe_ratio
+  top_n: 3

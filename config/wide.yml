@@ -1,31 +1,35 @@
 data:
-  ticker: BTC
+  ticker: SOL
   start: '2018-01-01'
   end:
   interval: 1d
   data_source: alphavantage  # Options: "yfinance" or "alphavantage"
   asset_type:  # Options: "crypto", "stock", or empty (auto-detect from ticker format)
   local_csv:
-  cache_csv: data/cache/BTC_1D.csv
+  cache_csv: data/cache/SOL_1D.csv
 
 strategy:
-  name: ensemble
-  params:  # 12,22,82,20,27,28
-    ema_fast: 12
-    ema_mid: 22 
-    ema_slow: 82
+  name: ensemble_unconstrained
+  params:  #
+    # ema_fast: 12
+    # ema_mid: 22 
+    # ema_slow: 82
+    # fastperiod: 20
+    # slowperiod: 27
+    # signalperiod: 28
+    ema_fast: 59
+    ema_mid: 126 
+    ema_slow: 39
     fastperiod: 20
     slowperiod: 27
     signalperiod: 28
   grid:
-    # - Explicit list: [5, 15, 20, 30, 35] (uses values as-is)
-    # - Range notation: "4:40:2" (generates [4, 6, 8, ..., 40] from start:end:step)
-    ema_fast: "4:60:6" 
-    ema_mid: "65:165:10"   
-    ema_slow: "80:240:40"   
-    fastperiod: "5:75:5"   
-    slowperiod: "50:160:10"
-    signalperiod: "5:80:5"
+    ema_fast: "2:35:4" 
+    ema_mid: "50:170:5"   
+    ema_slow: "60:200:10"   
+    fastperiod: "5:40:3"   
+    slowperiod: "40:90:5"
+    signalperiod: "5:90:5"
 
 backtest:
   init_cash: 100000

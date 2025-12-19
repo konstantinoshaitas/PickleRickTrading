@@ -1,0 +1,24 @@
+strategy:
+  name: ensemble_unconstrained
+  grid:
+    ema_fast: "5:45:5"
+    ema_mid: "55:165:10"
+    ema_slow: "70:200:10"
+    fastperiod: "4:90:5"
+    slowperiod: "6:120:5"
+    signalperiod: "5:90:5"
+optimization:
+  train_ratio: 0.6
+  val_ratio: 0.2
+  test_ratio: 0.2
+  top_percent_phase1: 0.01
+  transfer_ratio_threshold: 0.6
+  sensitivity_step: 2
+  final_candidates: 3
+backtest:
+  init_cash: 100000
+  fees: 0.0004
+  slippage: 0.0002
+  freq: D
+grid:
+  metric: sharpe_ratio
