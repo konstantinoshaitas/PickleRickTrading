@@ -73,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     optimize.add_argument("--top-percent", type=float, default=0.01, help="Top percent to keep from grid search (default: 0.01 = 1%%)")
     optimize.add_argument("--transfer-threshold", type=float, default=0.6, help="Min transfer ratio (default: 0.6)")
     optimize.add_argument("--final-candidates", type=int, default=3, help="Number of final candidates (default: 3)")
+    optimize.add_argument("--n-jobs", type=int, default=None, help="Number of parallel processes for phases 2 & 3 (default: CPU count - 1)")
     
     # Registry command - view registry contents
     registry = sub.add_parser("registry", help="View optimized asset registry")
@@ -474,6 +475,7 @@ def cmd_optimize(
     top_percent: float,
     transfer_threshold: float,
     final_candidates: int,
+    n_jobs: Optional[int] = None,
 ):
     """Run 3-phase optimization pipeline for a single asset."""
     from backtesting.config import OptimizationConfig
@@ -495,6 +497,7 @@ def cmd_optimize(
         template=template,
         opt_config=opt_config,
         verbose=True,
+        n_jobs=n_jobs,
     )
     
     try:
@@ -603,6 +606,7 @@ def main():
             top_percent=args.top_percent,
             transfer_threshold=args.transfer_threshold,
             final_candidates=args.final_candidates,
+            n_jobs=args.n_jobs,
         )
         return
     elif args.command == "registry":

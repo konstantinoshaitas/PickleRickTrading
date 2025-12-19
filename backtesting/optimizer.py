@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import itertools
+import multiprocessing as mp
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import vectorbt as vbt
 
 from .backtest import BacktestEngine
 from .config import (
@@ -53,8 +55,13 @@ from .config import (
     update_registry_entry,
 )
 from .data import DataFetcher, split_train_val_test, get_split_info
-from .grid import VectorizedGridSearch
-from .metrics import compute_metrics
+from .grid import (
+    VectorizedGridSearch,
+    _compute_ema_signals_batch,
+    _compute_macd_signals_batch,
+    _compute_ensemble_signals_batch,
+)
+from .metrics import compute_batch_metrics, compute_metrics
 from .strategies import StrategyFactory
 
 
@@ -90,6 +97,7 @@ class OptimizationCandidate:
             "stability_score": self.stability_score,
             "consistency": self.consistency,
             "composite_score": self.composite_score,
+            "neighbor_sharpes": self.neighbor_sharpes,
             "train_return": self.train_return,
             "val_return": self.val_return,
             "test_return": self.test_return,
@@ -139,6 +147,172 @@ class OptimizationResult:
         return "\n".join(filter(None, lines))
 
 
+def _run_phase2_validation_worker(args: Tuple) -> Optional[Dict]:
+    """Worker function for Phase 2 multiprocessing - validates a single candidate.
+    
+    Args:
+        args: Tuple containing:
+            - candidate_dict: Candidate as dictionary (params, train_sharpe, etc.)
+            - val_values: Validation close price values (numpy array)
+            - val_index: Validation close price index (DatetimeIndex values)
+            - engine_config: BacktestConfig dict
+            - strategy_name: Strategy name string
+            - freq: Frequency string
+            - transfer_threshold: Transfer ratio threshold
+    
+    Returns:
+        Updated candidate dict if passes, None if fails
+    """
+    (candidate_dict, val_values, val_index, engine_config, 
+     strategy_name, freq, transfer_threshold) = args
+    
+    try:
+        # Reconstruct objects
+        val_close = pd.Series(val_values, index=pd.DatetimeIndex(val_index))
+        engine = BacktestEngine(BacktestConfig(**engine_config))
+        strategy_cls = StrategyFactory[strategy_name]
+        
+        # Run backtest on validation
+        strategy = strategy_cls(**candidate_dict['params'])
+        entries, exits = strategy.generate_signals(val_close)
+        portfolio = engine.run(val_close, (entries, exits))
+        metrics = compute_metrics(portfolio, val_close, freq)
+        
+        val_sharpe = metrics.get('sharpe_ratio', 0)
+        train_sharpe = candidate_dict.get('train_sharpe', 0)
+        
+        # Compute transfer ratio
+        if train_sharpe > 0:
+            transfer_ratio = val_sharpe / train_sharpe
+        else:
+            transfer_ratio = 0
+        
+        # Update candidate dict
+        candidate_dict['val_sharpe'] = val_sharpe
+        candidate_dict['val_return'] = metrics.get('total_return', 0)
+        candidate_dict['val_max_dd'] = metrics.get('max_drawdown', 0)
+        candidate_dict['transfer_ratio'] = transfer_ratio
+        
+        # Return if passes threshold, None otherwise
+        if transfer_ratio >= transfer_threshold:
+            return candidate_dict
+        else:
+            return None
+            
+    except Exception:
+        return None
+
+
+def _run_phase3_sensitivity_worker(args: Tuple) -> Optional[Dict]:
+    """Worker function for Phase 3 multiprocessing - analyzes a single candidate.
+    
+    Args:
+        args: Tuple containing:
+            - candidate_dict: Candidate as dictionary
+            - test_values: Test close price values (numpy array)
+            - test_index: Test close price index (DatetimeIndex values)
+            - engine_config: BacktestConfig dict
+            - strategy_name: Strategy name string
+            - freq: Frequency string
+            - sensitivity_step: Step size for neighbor generation
+    
+    Returns:
+        Updated candidate dict with test metrics and stability scores
+    """
+    (candidate_dict, test_values, test_index, engine_config,
+     strategy_name, freq, sensitivity_step) = args
+    
+    try:
+        # Reconstruct objects
+        test_close = pd.Series(test_values, index=pd.DatetimeIndex(test_index))
+        engine = BacktestEngine(BacktestConfig(**engine_config))
+        strategy_cls = StrategyFactory[strategy_name]
+        
+        params = candidate_dict['params']
+        
+        # Run on TEST data
+        strategy = strategy_cls(**params)
+        entries, exits = strategy.generate_signals(test_close)
+        portfolio = engine.run(test_close, (entries, exits))
+        metrics = compute_metrics(portfolio, test_close, freq)
+        
+        test_sharpe = metrics.get('sharpe_ratio', 0)
+        candidate_dict['test_sharpe'] = test_sharpe
+        candidate_dict['test_return'] = metrics.get('total_return', 0)
+        candidate_dict['test_max_dd'] = metrics.get('max_drawdown', 0)
+        
+        # Generate neighbors and test sensitivity
+        neighbors = _generate_neighbors_static(params, sensitivity_step)
+        
+        neighbor_sharpes = []
+        for neighbor_params in neighbors:
+            try:
+                n_strategy = strategy_cls(**neighbor_params)
+                n_entries, n_exits = n_strategy.generate_signals(test_close)
+                n_portfolio = engine.run(test_close, (n_entries, n_exits))
+                n_metrics = compute_metrics(n_portfolio, test_close, freq)
+                neighbor_sharpes.append(n_metrics.get('sharpe_ratio', 0))
+            except Exception:
+                continue
+        
+        candidate_dict['neighbor_sharpes'] = neighbor_sharpes
+        
+        # Compute stability score
+        if neighbor_sharpes and test_sharpe and test_sharpe > 0:
+            min_neighbor = min(neighbor_sharpes) if neighbor_sharpes else 0
+            stability_score = min_neighbor / test_sharpe
+        else:
+            stability_score = 0
+        
+        candidate_dict['stability_score'] = stability_score
+        
+        # Compute consistency (min/max across all periods)
+        train_sharpe = candidate_dict.get('train_sharpe', 0)
+        val_sharpe = candidate_dict.get('val_sharpe', 0)
+        sharpes = [s for s in [train_sharpe, val_sharpe, test_sharpe] if s]
+        if sharpes and max(sharpes) > 0:
+            consistency = min(sharpes) / max(sharpes)
+        else:
+            consistency = 0
+        
+        candidate_dict['consistency'] = consistency
+        
+        # Compute composite score
+        composite_score = test_sharpe * max(consistency, 0.1) * max(stability_score, 0.1) if test_sharpe > 0 else 0
+        candidate_dict['composite_score'] = composite_score
+        
+        return candidate_dict
+        
+    except Exception:
+        return None
+
+
+def _generate_neighbors_static(params: Dict[str, Any], step: int = 2) -> List[Dict[str, Any]]:
+    """Static version of neighbor generation for multiprocessing."""
+    neighbors = []
+    
+    for key in params:
+        original = params[key]
+        
+        # Skip non-numeric params
+        if not isinstance(original, (int, float)):
+            continue
+        
+        # Generate perturbations
+        for delta in [-step, -1, 1, step]:
+            new_val = original + delta
+            
+            # Ensure positive values (periods must be > 0)
+            if new_val <= 0:
+                continue
+            
+            neighbor = dict(params)
+            neighbor[key] = int(new_val) if isinstance(original, int) else new_val
+            neighbors.append(neighbor)
+    
+    return neighbors
+
+
 class AssetOptimizer:
     """
     3-Phase optimization pipeline for single asset parameter selection.
@@ -169,10 +343,12 @@ class AssetOptimizer:
         config: Optional[WorkflowConfig] = None,
         opt_config: Optional[OptimizationConfig] = None,
         verbose: bool = True,
+        n_jobs: Optional[int] = None,
     ):
         self.ticker = ticker.upper()
         self.strategy = strategy
         self.verbose = verbose
+        self.n_jobs = n_jobs or max(1, mp.cpu_count() - 1)  # Leave 1 core free
         
         # Load or build configuration
         if config:
@@ -346,6 +522,7 @@ class AssetOptimizer:
         Phase 2: Validation filter - remove overfit parameters.
         
         Runs each candidate on VALIDATION data and filters by transfer ratio.
+        Uses multiprocessing for parallel execution when beneficial.
         
         Args:
             candidates: Candidates from Phase 1
@@ -361,6 +538,26 @@ class AssetOptimizer:
         self.log(f"{'='*60}")
         self.log(f"  Testing {len(candidates)} candidates on VALIDATION data...")
         
+        # Check if strategy supports vectorization
+        supports_vectorization = self.strategy in VectorizedGridSearch.SUPPORTED_STRATEGIES
+        
+        # Use vectorization if supported and we have enough candidates
+        if supports_vectorization and len(candidates) > 10:
+            self.log(f"  Using vectorized batch processing...")
+            passed = self._run_phase2_vectorized(candidates)
+        # Use multiprocessing if we have enough candidates and cores
+        elif len(candidates) > 50 and self.n_jobs > 1:
+            self.log(f"  Using {self.n_jobs} processes for parallel execution...")
+            passed = self._run_phase2_multiprocessing(candidates)
+        else:
+            passed = self._run_phase2_sequential(candidates)
+        
+        self.log(f"  {len(passed)} candidates passed (transfer ratio >= {self.opt_config.transfer_ratio_threshold})")
+        
+        return passed
+    
+    def _run_phase2_sequential(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 2 sequentially (fallback for small candidate sets)."""
         engine = BacktestEngine(self.config.backtest)
         strategy_cls = StrategyFactory[self.strategy]
         
@@ -390,14 +587,157 @@ class AssetOptimizer:
                     passed.append(candidate)
                     
             except Exception as e:
-                self.log(f"    Candidate {i} failed: {e}")
+                if self.verbose:
+                    self.log(f"    Candidate {i} failed: {e}")
                 continue
             
             # Progress update
             if (i + 1) % 100 == 0:
                 self.log(f"    Processed {i+1}/{len(candidates)} ({len(passed)} passed)")
         
-        self.log(f"  {len(passed)} candidates passed (transfer ratio >= {self.opt_config.transfer_ratio_threshold})")
+        return passed
+    
+    def _run_phase2_vectorized(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 2 using vectorized batch processing."""
+        # Extract parameters from candidates
+        param_dicts = [candidate.params for candidate in candidates]
+        
+        # Get parameter keys (assuming all candidates have same keys)
+        if not param_dicts:
+            return []
+        keys = list(param_dicts[0].keys())
+        
+        # Convert to parameter lists for batch processing
+        param_lists = {key: [params[key] for params in param_dicts] for key in keys}
+        
+        # Create column index
+        n_candidates = len(candidates)
+        common_cols = pd.Index(range(n_candidates), name='candidate_id')
+        
+        # Compute signals based on strategy type
+        if self.strategy in ("triple_ema", "triple_ema_unconstrained"):
+            entries, exits = _compute_ema_signals_batch(
+                self.val,
+                param_lists['ema_fast'],
+                param_lists['ema_mid'],
+                param_lists['ema_slow'],
+                common_cols
+            )
+        elif self.strategy == "macd":
+            entries, exits = _compute_macd_signals_batch(
+                self.val,
+                param_lists['fastperiod'],
+                param_lists['slowperiod'],
+                param_lists['signalperiod'],
+                common_cols
+            )
+        elif self.strategy in ("ensemble", "ensemble_unconstrained"):
+            entries, exits = _compute_ensemble_signals_batch(
+                self.val,
+                param_lists['ema_fast'],
+                param_lists['ema_mid'],
+                param_lists['ema_slow'],
+                param_lists['fastperiod'],
+                param_lists['slowperiod'],
+                param_lists['signalperiod'],
+                common_cols
+            )
+        else:
+            # Fallback to sequential if strategy not supported
+            return self._run_phase2_sequential(candidates)
+        
+        # Run batch backtest
+        pf = vbt.Portfolio.from_signals(
+            close=self.val,
+            entries=entries,
+            exits=exits,
+            init_cash=self.config.backtest.init_cash,
+            fees=self.config.backtest.fees,
+            slippage=self.config.backtest.slippage,
+            freq=self.config.backtest.freq
+        )
+        
+        # Build parameter DataFrame
+        param_df = pd.DataFrame(param_lists)
+        
+        # Compute batch metrics
+        result_df = compute_batch_metrics(pf, self.val, self.config.backtest.freq, param_df)
+        
+        # Map results back to candidates and compute transfer ratios
+        passed = []
+        for i, candidate in enumerate(candidates):
+            if i < len(result_df):
+                row = result_df.iloc[i]
+                val_sharpe = float(row.get('sharpe_ratio', 0))
+                candidate.val_sharpe = val_sharpe
+                candidate.val_return = float(row.get('total_return', 0))
+                candidate.val_max_dd = float(row.get('max_drawdown', 0))
+                
+                # Compute transfer ratio
+                if candidate.train_sharpe > 0:
+                    candidate.transfer_ratio = val_sharpe / candidate.train_sharpe
+                else:
+                    candidate.transfer_ratio = 0
+                
+                # Filter by transfer ratio
+                if candidate.transfer_ratio >= self.opt_config.transfer_ratio_threshold:
+                    passed.append(candidate)
+        
+        return passed
+    
+    def _run_phase2_multiprocessing(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 2 using multiprocessing."""
+        # Prepare serializable arguments
+        val_values = self.val.values
+        val_index = self.val.index.values
+        engine_config = {
+            'init_cash': self.config.backtest.init_cash,
+            'fees': self.config.backtest.fees,
+            'slippage': self.config.backtest.slippage,
+            'freq': self.config.backtest.freq,
+        }
+        
+        # Convert candidates to dictionaries for serialization
+        candidate_dicts = [candidate.to_dict() for candidate in candidates]
+        
+        # Create args list for workers
+        args_list = [
+            (
+                candidate_dict, val_values, val_index,
+                engine_config, self.strategy, self.config.backtest.freq,
+                self.opt_config.transfer_ratio_threshold
+            )
+            for candidate_dict in candidate_dicts
+        ]
+        
+        passed = []
+        processed = 0
+        
+        # Process in chunks for progress tracking
+        chunk_size = max(50, len(args_list) // (self.n_jobs * 4))
+        
+        with mp.Pool(processes=self.n_jobs) as pool:
+            for i in range(0, len(args_list), chunk_size):
+                chunk = args_list[i:i + chunk_size]
+                results_chunk = pool.map(_run_phase2_validation_worker, chunk)
+                
+                # Filter out None results and convert back to candidates
+                for result_dict in results_chunk:
+                    if result_dict is not None:
+                        candidate = OptimizationCandidate(
+                            params=result_dict['params'],
+                            train_sharpe=result_dict.get('train_sharpe', 0),
+                            val_sharpe=result_dict.get('val_sharpe'),
+                            transfer_ratio=result_dict.get('transfer_ratio'),
+                            train_return=result_dict.get('train_return'),
+                            val_return=result_dict.get('val_return'),
+                            val_max_dd=result_dict.get('val_max_dd'),
+                        )
+                        passed.append(candidate)
+                
+                processed += len(chunk)
+                if processed % 100 == 0 or processed == len(args_list):
+                    self.log(f"    Processed {processed}/{len(candidates)} ({len(passed)} passed)")
         
         return passed
     
@@ -411,6 +751,7 @@ class AssetOptimizer:
         
         For each candidate, perturb parameters and check stability.
         Compute final composite scores.
+        Uses multiprocessing for parallel execution when beneficial.
         
         Args:
             candidates: Candidates from Phase 2
@@ -430,6 +771,163 @@ class AssetOptimizer:
         candidates = candidates[:max_candidates]
         self.log(f"  Analyzing {len(candidates)} candidates...")
         
+        # Check if strategy supports vectorization
+        supports_vectorization = self.strategy in VectorizedGridSearch.SUPPORTED_STRATEGIES
+        
+        # Use vectorization if supported and we have enough candidates
+        if supports_vectorization and len(candidates) > 5:
+            self.log(f"  Using vectorized batch processing...")
+            analyzed = self._run_phase3_vectorized(candidates)
+        # Use multiprocessing if we have enough candidates and cores
+        elif len(candidates) > 10 and self.n_jobs > 1:
+            self.log(f"  Using {self.n_jobs} processes for parallel execution...")
+            analyzed = self._run_phase3_multiprocessing(candidates)
+        else:
+            analyzed = self._run_phase3_sequential(candidates)
+        
+        # Sort by composite score
+        analyzed.sort(key=lambda c: c.composite_score or 0, reverse=True)
+        
+        # Keep top N
+        final = analyzed[:self.opt_config.final_candidates]
+        
+        self.log(f"  Top {len(final)} candidates selected by composite score")
+        
+        return final
+    
+    def _run_phase3_vectorized(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 3 using vectorized batch processing (candidates + neighbors)."""
+        # Collect all parameter sets: candidates + their neighbors
+        all_param_sets = []
+        candidate_indices = []  # Maps each param set to its candidate index
+        neighbor_indices = []   # Maps each param set to neighbor index (-1 for original candidate)
+        
+        for i, candidate in enumerate(candidates):
+            # Add original candidate
+            all_param_sets.append(candidate.params)
+            candidate_indices.append(i)
+            neighbor_indices.append(-1)  # -1 means original candidate
+            
+            # Add neighbors
+            neighbors = self._generate_neighbors(
+                candidate.params,
+                step=self.opt_config.sensitivity_step
+            )
+            for neighbor in neighbors:
+                all_param_sets.append(neighbor)
+                candidate_indices.append(i)
+                neighbor_indices.append(len(neighbors) - 1)  # Track which neighbor
+        
+        if not all_param_sets:
+            return candidates
+        
+        # Get parameter keys
+        keys = list(all_param_sets[0].keys())
+        
+        # Convert to parameter lists for batch processing
+        param_lists = {key: [params[key] for params in all_param_sets] for key in keys}
+        
+        # Create column index
+        n_total = len(all_param_sets)
+        common_cols = pd.Index(range(n_total), name='combo_id')
+        
+        # Compute signals based on strategy type
+        if self.strategy in ("triple_ema", "triple_ema_unconstrained"):
+            entries, exits = _compute_ema_signals_batch(
+                self.test,
+                param_lists['ema_fast'],
+                param_lists['ema_mid'],
+                param_lists['ema_slow'],
+                common_cols
+            )
+        elif self.strategy == "macd":
+            entries, exits = _compute_macd_signals_batch(
+                self.test,
+                param_lists['fastperiod'],
+                param_lists['slowperiod'],
+                param_lists['signalperiod'],
+                common_cols
+            )
+        elif self.strategy in ("ensemble", "ensemble_unconstrained"):
+            entries, exits = _compute_ensemble_signals_batch(
+                self.test,
+                param_lists['ema_fast'],
+                param_lists['ema_mid'],
+                param_lists['ema_slow'],
+                param_lists['fastperiod'],
+                param_lists['slowperiod'],
+                param_lists['signalperiod'],
+                common_cols
+            )
+        else:
+            # Fallback to sequential if strategy not supported
+            return self._run_phase3_sequential(candidates)
+        
+        # Run batch backtest
+        pf = vbt.Portfolio.from_signals(
+            close=self.test,
+            entries=entries,
+            exits=exits,
+            init_cash=self.config.backtest.init_cash,
+            fees=self.config.backtest.fees,
+            slippage=self.config.backtest.slippage,
+            freq=self.config.backtest.freq
+        )
+        
+        # Build parameter DataFrame
+        param_df = pd.DataFrame(param_lists)
+        
+        # Compute batch metrics
+        result_df = compute_batch_metrics(pf, self.test, self.config.backtest.freq, param_df)
+        
+        # Map results back to candidates
+        for i, candidate in enumerate(candidates):
+            # Find original candidate result (neighbor_index == -1)
+            candidate_idx = None
+            for j, (cand_idx, neigh_idx) in enumerate(zip(candidate_indices, neighbor_indices)):
+                if cand_idx == i and neigh_idx == -1:
+                    candidate_idx = j
+                    break
+            
+            if candidate_idx is not None and candidate_idx < len(result_df):
+                row = result_df.iloc[candidate_idx]
+                candidate.test_sharpe = float(row.get('sharpe_ratio', 0))
+                candidate.test_return = float(row.get('total_return', 0))
+                candidate.test_max_dd = float(row.get('max_drawdown', 0))
+                
+                # Collect neighbor sharpes
+                neighbor_sharpes = []
+                for j, (cand_idx, neigh_idx) in enumerate(zip(candidate_indices, neighbor_indices)):
+                    if cand_idx == i and neigh_idx != -1 and j < len(result_df):
+                        neighbor_row = result_df.iloc[j]
+                        neighbor_sharpes.append(float(neighbor_row.get('sharpe_ratio', 0)))
+                
+                candidate.neighbor_sharpes = neighbor_sharpes
+                
+                # Compute stability score
+                if neighbor_sharpes and candidate.test_sharpe and candidate.test_sharpe > 0:
+                    min_neighbor = min(neighbor_sharpes) if neighbor_sharpes else 0
+                    candidate.stability_score = min_neighbor / candidate.test_sharpe
+                else:
+                    candidate.stability_score = 0
+                
+                # Compute consistency (min/max across all periods)
+                sharpes = [s for s in [candidate.train_sharpe, candidate.val_sharpe, candidate.test_sharpe] if s]
+                if sharpes and max(sharpes) > 0:
+                    candidate.consistency = min(sharpes) / max(sharpes)
+                else:
+                    candidate.consistency = 0
+                
+                # Compute composite score
+                candidate.composite_score = self._compute_composite_score(candidate)
+            else:
+                # Fallback if candidate not found
+                candidate.composite_score = 0
+        
+        return candidates
+    
+    def _run_phase3_sequential(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 3 sequentially (fallback for small candidate sets)."""
         engine = BacktestEngine(self.config.backtest)
         strategy_cls = StrategyFactory[self.strategy]
         
@@ -482,7 +980,8 @@ class AssetOptimizer:
                 candidate.composite_score = self._compute_composite_score(candidate)
                 
             except Exception as e:
-                self.log(f"    Candidate {i} failed: {e}")
+                if self.verbose:
+                    self.log(f"    Candidate {i} failed: {e}")
                 candidate.composite_score = 0
                 continue
             
@@ -490,15 +989,71 @@ class AssetOptimizer:
             if (i + 1) % 20 == 0:
                 self.log(f"    Processed {i+1}/{len(candidates)}")
         
-        # Sort by composite score
-        candidates.sort(key=lambda c: c.composite_score or 0, reverse=True)
+        return candidates
+    
+    def _run_phase3_multiprocessing(self, candidates: List[OptimizationCandidate]) -> List[OptimizationCandidate]:
+        """Run Phase 3 using multiprocessing."""
+        # Prepare serializable arguments
+        test_values = self.test.values
+        test_index = self.test.index.values
+        engine_config = {
+            'init_cash': self.config.backtest.init_cash,
+            'fees': self.config.backtest.fees,
+            'slippage': self.config.backtest.slippage,
+            'freq': self.config.backtest.freq,
+        }
         
-        # Keep top N
-        final = candidates[:self.opt_config.final_candidates]
+        # Convert candidates to dictionaries for serialization
+        candidate_dicts = [candidate.to_dict() for candidate in candidates]
         
-        self.log(f"  Top {len(final)} candidates selected by composite score")
+        # Create args list for workers
+        args_list = [
+            (
+                candidate_dict, test_values, test_index,
+                engine_config, self.strategy, self.config.backtest.freq,
+                self.opt_config.sensitivity_step
+            )
+            for candidate_dict in candidate_dicts
+        ]
         
-        return final
+        analyzed = []
+        processed = 0
+        
+        # Process in chunks for progress tracking
+        chunk_size = max(10, len(args_list) // (self.n_jobs * 2))
+        
+        with mp.Pool(processes=self.n_jobs) as pool:
+            for i in range(0, len(args_list), chunk_size):
+                chunk = args_list[i:i + chunk_size]
+                results_chunk = pool.map(_run_phase3_sensitivity_worker, chunk)
+                
+                # Convert results back to candidates
+                for result_dict in results_chunk:
+                    if result_dict is not None:
+                        candidate = OptimizationCandidate(
+                            params=result_dict['params'],
+                            train_sharpe=result_dict.get('train_sharpe', 0),
+                            val_sharpe=result_dict.get('val_sharpe'),
+                            test_sharpe=result_dict.get('test_sharpe'),
+                            transfer_ratio=result_dict.get('transfer_ratio'),
+                            stability_score=result_dict.get('stability_score'),
+                            consistency=result_dict.get('consistency'),
+                            composite_score=result_dict.get('composite_score'),
+                            neighbor_sharpes=result_dict.get('neighbor_sharpes', []),
+                            train_return=result_dict.get('train_return'),
+                            val_return=result_dict.get('val_return'),
+                            test_return=result_dict.get('test_return'),
+                            train_max_dd=result_dict.get('train_max_dd'),
+                            val_max_dd=result_dict.get('val_max_dd'),
+                            test_max_dd=result_dict.get('test_max_dd'),
+                        )
+                        analyzed.append(candidate)
+                
+                processed += len(chunk)
+                if processed % 20 == 0 or processed == len(args_list):
+                    self.log(f"    Processed {processed}/{len(candidates)}")
+        
+        return analyzed
     
     def run(self, force_download: bool = False) -> OptimizationResult:
         """
@@ -707,6 +1262,7 @@ def optimize_asset(
     template: str = "wide_ensemble_grid.yml",
     save: bool = False,
     verbose: bool = True,
+    n_jobs: Optional[int] = None,
 ) -> OptimizationResult:
     """
     Convenience function to run full optimization pipeline.
@@ -717,6 +1273,7 @@ def optimize_asset(
         template: Template config name
         save: Save best result to registry
         verbose: Print progress
+        n_jobs: Number of parallel processes (default: CPU count - 1)
         
     Returns:
         OptimizationResult with final candidates
@@ -730,6 +1287,7 @@ def optimize_asset(
         strategy=strategy,
         template=template,
         verbose=verbose,
+        n_jobs=n_jobs,
     )
     
     result = optimizer.run()

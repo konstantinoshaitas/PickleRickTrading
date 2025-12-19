@@ -112,31 +112,34 @@ assets:
     data_source: alphavantage
     start_date: '2018-01-01'
   AAPL:
-    strategy: macd
+    strategy: ensemble_unconstrained
     params:
-      fastperiod: 22
-      slowperiod: 98
-      signalperiod: 17
-    last_optimized: '2025-12-19'
-    train_sharpe: 2.092927220370439
-    val_sharpe: 1.1918799456918103
-    test_sharpe: 0.7120001571936354
-    stability_score: 0.4618568440172439
+      ema_fast: 30
+      ema_mid: 85
+      ema_slow: 100
+      fastperiod: 9
+      slowperiod: 51
+      signalperiod: 80
+    last_optimized: '2025-12-20'
+    train_sharpe: 2.3394264902428765
+    val_sharpe: 1.4275418373549207
+    test_sharpe: 1.33832838327989
+    stability_score: 0.6262496631420112
     data_source: yfinance
     start_date: '2018-01-01'
   QQQ:
     strategy: ensemble_unconstrained
     params:
-      ema_fast: 20705
+      ema_fast: 5
       ema_mid: 85
-      ema_slow: 180
+      ema_slow: 190
       fastperiod: 39
-      slowperiod: 76
-      signalperiod: 5
+      slowperiod: 41
+      signalperiod: 55
     last_optimized: '2025-12-19'
-    train_sharpe: 1.4594710425999176
-    val_sharpe: 1.6687256468882592
-    test_sharpe: 1.8526623256435684
-    stability_score: 0.7076127987383874
+    train_sharpe: 1.9143654559474423
+    val_sharpe: 2.102988460796873
+    test_sharpe: 2.3136768611685468
+    stability_score: 0.7469268392381764
     data_source: yfinance
     start_date: '2018-01-01'
