@@ -5,12 +5,12 @@ from .ensemble_unconstrained import EnsembleUnconstrainedStrategy
 from .rsi_filter_portfolio import RSIFilterPortfolioStrategy
 from .triple_ema import TripleEMAStrategy
 from .triple_ema_unconstrained import TripleEMAUnconstrainedStrategy
-from .triple_macd import TripleMACDStrategy
+from .macd import MACDStrategy
 
 StrategyFactory = {
     "triple_ema": TripleEMAStrategy,
     "triple_ema_unconstrained": TripleEMAUnconstrainedStrategy,
-    "triple_macd": TripleMACDStrategy,
+    "macd": MACDStrategy,
     "ensemble": EnsembleStrategy,
     "ensemble_unconstrained": EnsembleUnconstrainedStrategy,
 }
@@ -19,7 +19,7 @@ __all__ = [
     "StrategyFactory",
     "TripleEMAStrategy",
     "TripleEMAUnconstrainedStrategy",
-    "TripleMACDStrategy",
+    "MACDStrategy",
     "EnsembleStrategy",
     "EnsembleUnconstrainedStrategy",
     "RSIFilterPortfolioStrategy",

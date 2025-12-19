@@ -10,16 +10,34 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from .backtest import BacktestEngine, PortfolioBuilder
-from .config import WorkflowConfig
+from .config import WorkflowConfig, get_asset_cache_path
 from .data import DataFetcher, load_multi_asset_prices, split_train_val
-from .grid import GridSearch, VectorizedGridSearch
+from .grid import GridSearch, VectorizedGridSearch, VectorizedPortfolioGridSearch
 from .metrics import buy_and_hold, compute_metrics
 from .strategies import StrategyFactory
 from .strategies.rsi_filter_portfolio import RSIFilterPortfolioStrategy
 
 
 def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.Series, pd.DataFrame]:
-    """Fetch prices based on config, returning close series and full OHLCV frame."""
+    """Fetch prices based on config, returning close series and full OHLCV frame.
+    
+    Auto-resolves cache path to new asset-centric structure (assets/{TICKER}/cache.csv)
+    if it exists, otherwise falls back to config value or old path for backward compatibility.
+    """
+    # Auto-resolve cache path to new asset-centric structure
+    cache_csv = cfg.data.cache_csv
+    
+    # If cache_csv not set or doesn't exist, try new asset-centric path
+    if not cache_csv or not Path(cache_csv).exists():
+        new_cache_path = get_asset_cache_path(cfg.data.ticker)
+        if new_cache_path.exists():
+            cache_csv = str(new_cache_path)
+        elif cfg.data.cache_csv:
+            # Keep original if specified (for backward compatibility)
+            cache_csv = cfg.data.cache_csv
+        else:
+            cache_csv = None
+    
     fetcher = DataFetcher(
         ticker=cfg.data.ticker,
         start=cfg.data.start,
@@ -28,7 +46,7 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
         data_source=cfg.data.data_source,
         asset_type=cfg.data.asset_type,
         local_csv=cfg.data.local_csv,
-        cache_csv=cfg.data.cache_csv,
+        cache_csv=cache_csv,
     )
     ohlcv = fetcher.load(force_download=force_download)
     close = fetcher.close()
@@ -107,7 +125,7 @@ def run_grid_search(
         Vectorized search is ~10-20x faster but only supports:
         - triple_ema
         - triple_ema_unconstrained
-        - triple_macd
+        - macd
         - ensemble
         - ensemble_unconstrained
         
@@ -219,11 +237,19 @@ def run_portfolio_backtest(
             "Set cfg.portfolio with tickers, RSI parameters, etc."
         )
     
+    # Build per-asset cache_csv overrides from portfolio.assets if any are specified
+    per_asset_cache_csv = {}
+    if cfg.portfolio.assets:
+        for ticker, asset_cfg in cfg.portfolio.assets.items():
+            if asset_cfg.cache_csv:
+                per_asset_cache_csv[ticker] = asset_cfg.cache_csv
+    
     # Load multi-asset prices
     prices = load_multi_asset_prices(
         tickers=cfg.portfolio.tickers,
         config=cfg.data,
         force_download=False,
+        per_asset_cache_csv=per_asset_cache_csv if per_asset_cache_csv else None,
     )
     
     # Ensure safe haven ticker is in prices
@@ -253,7 +279,14 @@ def run_portfolio_backtest(
     default_strategy_cls = StrategyFactory[cfg.strategy.name]
     default_strategy = default_strategy_cls(**cfg.strategy.params)
     
+    # Safe haven ticker - we don't generate signals for it (only used for allocation)
+    safe_haven = cfg.portfolio.safe_haven_ticker
+    
     for asset in cfg.portfolio.tickers:
+        # Skip safe haven ticker - no signals needed (it's only for allocation)
+        if asset == safe_haven:
+            continue
+            
         # Determine strategy for this asset
         if asset in cfg.portfolio.assets:
             asset_cfg = cfg.portfolio.assets[asset]
@@ -368,19 +401,90 @@ def run_portfolio_backtest(
     return outputs
 
 
-def run_portfolio_grid_search(cfg: WorkflowConfig) -> List[Dict]:
-    """Run grid search for portfolio parameters (RSI, Top-K, etc.)."""
+def run_portfolio_grid_search(cfg: WorkflowConfig, use_vectorized: bool = True) -> List[Dict]:
+    """Run grid search for portfolio parameters (RSI, Top-K, etc.).
+    
+    Args:
+        cfg: Workflow configuration with portfolio grid defined
+        use_vectorized: Use vectorized grid search for faster execution (default: True)
+        
+    Returns:
+        List of metric dictionaries for each parameter combination
+    """
     if not cfg.portfolio or not cfg.portfolio.grid:
         raise ValueError("No portfolio grid defined in configuration.")
+    
+    # Build per-asset cache_csv overrides from portfolio.assets if any are specified
+    per_asset_cache_csv = {}
+    if cfg.portfolio.assets:
+        for ticker, asset_cfg in cfg.portfolio.assets.items():
+            if asset_cfg.cache_csv:
+                per_asset_cache_csv[ticker] = asset_cfg.cache_csv
+    
+    # Load multi-asset prices once
+    prices = load_multi_asset_prices(
+        tickers=cfg.portfolio.tickers,
+        config=cfg.data,
+        force_download=False,
+        per_asset_cache_csv=per_asset_cache_csv if per_asset_cache_csv else None,
+    )
+    
+    # Split into train set (we optimize on training data only)
+    if cfg.backtest.train_ratio < 1.0:
+        split_idx = int(len(prices) * cfg.backtest.train_ratio)
+        train_prices = prices.iloc[:split_idx].copy()
+    else:
+        train_prices = prices.copy()
+    
+    # Generate ensemble signals for each asset once (they don't change with portfolio params)
+    safe_haven = cfg.portfolio.safe_haven_ticker
+    default_strategy_cls = StrategyFactory[cfg.strategy.name]
+    default_strategy = default_strategy_cls(**cfg.strategy.params)
+    
+    train_entries_dict = {}
+    train_exits_dict = {}
+    
+    for asset in cfg.portfolio.tickers:
+        if asset == safe_haven:
+            continue
+            
+        # Determine strategy for this asset
+        if asset in cfg.portfolio.assets:
+            asset_cfg = cfg.portfolio.assets[asset]
+            strat_cls = StrategyFactory[asset_cfg.strategy]
+            strategy = strat_cls(**asset_cfg.params)
+        else:
+            strategy = default_strategy
         
+        if asset in train_prices.columns:
+            asset_close = train_prices[asset]
+            entries, exits = strategy.generate_signals(asset_close)
+            train_entries_dict[asset] = entries
+            train_exits_dict[asset] = exits
+    
+    train_entries = pd.DataFrame(train_entries_dict, index=train_prices.index)
+    train_exits = pd.DataFrame(train_exits_dict, index=train_prices.index)
+    
+    if use_vectorized:
+        print("Using VectorizedPortfolioGridSearch...")
+        search = VectorizedPortfolioGridSearch(config=cfg.backtest, batch_size=500)
+        results = search.run(
+            prices=train_prices,
+            ensemble_entries=train_entries,
+            ensemble_exits=train_exits,
+            grid=cfg.portfolio.grid,
+            safe_haven_ticker=safe_haven,
+        )
+        return results
+    
+    # Fallback: sequential grid search (original implementation)
     keys = list(cfg.portfolio.grid.keys())
-    # Generate all combinations of parameters
     combos = list(itertools.product(*[cfg.portfolio.grid[k] for k in keys]))
     
     results = []
     total = len(combos)
     
-    print(f"Running portfolio grid search: {total} combinations")
+    print(f"Running portfolio grid search: {total} combinations (sequential)")
     print("-" * 50)
     
     for i, combo in enumerate(combos, 1):

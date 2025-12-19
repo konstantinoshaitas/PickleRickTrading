@@ -1,0 +1,1 @@
+Fix grid.py to use generator instead of materializing all combinations (line 508) for large grids

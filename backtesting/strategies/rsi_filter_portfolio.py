@@ -94,13 +94,17 @@ class RSIFilterPortfolioStrategy:
         )
         
         # Calculate RSI for each asset (excluding safe haven for ranking)
+        # RSI is calculated on cumulative returns (buy-and-hold returns) for cross-sectional momentum
         rsi_df = pd.DataFrame(
             index=prices.index,
             columns=asset_columns,
         )
         
         for asset in asset_columns:
-            rsi_series = vbt.RSI.run(prices[asset], window=self.rsi_period).rsi
+            # Calculate cumulative returns (buy-and-hold returns)
+            cum_returns = (1 + prices[asset].pct_change()).cumprod()
+            # Calculate RSI on cumulative returns (not on prices)
+            rsi_series = vbt.RSI.run(cum_returns, window=self.rsi_period).rsi
             rsi_df[asset] = rsi_series
         
         # Process each timestamp

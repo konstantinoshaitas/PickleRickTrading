@@ -1,0 +1,21 @@
+strategy:
+  name: macd
+  grid:
+    fastperiod: "4:90:2"
+    slowperiod: "6:150:2"
+    signalperiod: "5:100:2"
+optimization:
+  train_ratio: 0.6
+  val_ratio: 0.2
+  test_ratio: 0.2
+  top_percent_phase1: 0.01
+  transfer_ratio_threshold: 0.6
+  sensitivity_step: 2
+  final_candidates: 3
+backtest:
+  init_cash: 100000
+  fees: 0.0004
+  slippage: 0.0002
+  freq: D
+grid:
+  metric: sharpe_ratio

@@ -12,7 +12,7 @@ from typing import Tuple
 import pandas as pd
 
 from .triple_ema_unconstrained import TripleEMAUnconstrainedStrategy
-from .triple_macd import TripleMACDStrategy
+from .macd import MACDStrategy
 
 
 @dataclass
@@ -52,7 +52,7 @@ class EnsembleUnconstrainedStrategy:
         ema_entries, ema_exits = ema_strategy.generate_signals(close)
         
         # Generate signals from standard MACD strategy
-        macd_strategy = TripleMACDStrategy(
+        macd_strategy = MACDStrategy(
             fastperiod=self.fastperiod,
             slowperiod=self.slowperiod,
             signalperiod=self.signalperiod

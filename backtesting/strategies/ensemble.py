@@ -14,7 +14,7 @@ from typing import Tuple
 import pandas as pd
 
 from .triple_ema import TripleEMAStrategy
-from .triple_macd import TripleMACDStrategy
+from .macd import MACDStrategy
 
 
 @dataclass
@@ -32,9 +32,9 @@ class EnsembleStrategy:
         ema_fast: Fast EMA period for Triple EMA strategy
         ema_mid: Medium EMA period for Triple EMA strategy
         ema_slow: Slow EMA period for Triple EMA strategy
-        fastperiod: Fast EMA period for MACD (same as triple_macd)
-        slowperiod: Slow EMA period for MACD (same as triple_macd)
-        signalperiod: Signal line EMA period for MACD (same as triple_macd)
+        fastperiod: Fast EMA period for MACD (same as macd)
+        slowperiod: Slow EMA period for MACD (same as macd)
+        signalperiod: Signal line EMA period for MACD (same as macd)
     """
     ema_fast: int
     ema_mid: int
@@ -63,7 +63,7 @@ class EnsembleStrategy:
         )
         ema_entries, ema_exits = ema_strategy.generate_signals(close)
         
-        macd_strategy = TripleMACDStrategy(
+        macd_strategy = MACDStrategy(
             fastperiod=self.fastperiod,
             slowperiod=self.slowperiod,
             signalperiod=self.signalperiod

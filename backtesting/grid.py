@@ -286,7 +286,7 @@ def _run_vectorized_batch_worker(args: Tuple) -> Optional[pd.DataFrame]:
                 list(param_dict['ema_slow']),
                 common_cols
             )
-        elif strategy_name == "triple_macd":
+        elif strategy_name == "macd":
             entries, exits = _compute_macd_signals_batch(
                 close,
                 list(param_dict['fastperiod']),
@@ -436,13 +436,266 @@ def _compute_ensemble_signals_batch(
     return entries, exits
 
 
+class VectorizedPortfolioGridSearch:
+    """Vectorized grid search for portfolio RSI/top-K parameters.
+    
+    This class pre-computes RSI for all period values and vectorizes the
+    threshold/top-K filtering to evaluate thousands of combinations efficiently.
+    
+    Args:
+        config: BacktestConfig instance
+        batch_size: Number of parameter combinations per batch (default: 500)
+    """
+    
+    def __init__(self, config: BacktestConfig, batch_size: int = 500):
+        self.config = config
+        self.batch_size = batch_size
+        self.results: List[Dict] = []
+    
+    def run(
+        self,
+        prices: pd.DataFrame,
+        ensemble_entries: pd.DataFrame,
+        ensemble_exits: pd.DataFrame,
+        grid: Dict[str, List],
+        safe_haven_ticker: str = "GLD",
+    ) -> List[Dict]:
+        """Run vectorized portfolio grid search.
+        
+        Args:
+            prices: Multi-asset price DataFrame (columns = assets, index = dates)
+            ensemble_entries: Entry signals DataFrame (columns = assets, index = dates)
+            ensemble_exits: Exit signals DataFrame (columns = assets, index = dates)
+            grid: Parameter grid with rsi_period, rsi_threshold, top_k
+            safe_haven_ticker: Safe haven ticker for risk-off allocation
+            
+        Returns:
+            List of metric dictionaries for each parameter combination
+        """
+        keys = list(grid.keys())
+        
+        # Get unique RSI periods to pre-compute
+        rsi_periods = grid.get('rsi_period', [14])
+        if not isinstance(rsi_periods, list):
+            rsi_periods = [rsi_periods]
+        
+        rsi_thresholds = grid.get('rsi_threshold', [50.0])
+        if not isinstance(rsi_thresholds, list):
+            rsi_thresholds = [rsi_thresholds]
+            
+        top_ks = grid.get('top_k', [5])
+        if not isinstance(top_ks, list):
+            top_ks = [top_ks]
+        
+        # Asset columns (excluding safe haven)
+        asset_columns = [col for col in prices.columns if col != safe_haven_ticker]
+        
+        # Pre-compute RSI for all periods and all assets
+
+        # RSI is calculated on cumulative returns (buy-and-hold returns) for cross-sectional momentum
+        print("Pre-computing RSI for all period values...")
+        rsi_cache = {}  # {period: DataFrame of RSI values}
+        
+        for period in rsi_periods:
+            rsi_df = pd.DataFrame(index=prices.index, columns=asset_columns)
+            for asset in asset_columns:
+                # Calculate cumulative returns (buy-and-hold returns)
+                cum_returns = (1 + prices[asset].pct_change()).cumprod()
+                # Calculate RSI on cumulative returns (not on prices)
+                rsi_series = vbt.RSI.run(cum_returns, window=period).rsi
+                rsi_df[asset] = rsi_series
+            rsi_cache[period] = rsi_df
+        
+        print(f"Cached RSI for {len(rsi_periods)} periods across {len(asset_columns)} assets")
+        
+        # Generate all combinations
+        all_combos = list(itertools.product(rsi_periods, rsi_thresholds, top_ks))
+        total = len(all_combos)
+        
+        print(f"Running portfolio grid search: {total} combinations (vectorized)")
+        print("-" * 50)
+        
+        # Process in batches
+        for batch_start in range(0, total, self.batch_size):
+            batch_end = min(batch_start + self.batch_size, total)
+            batch = all_combos[batch_start:batch_end]
+            
+            for combo in batch:
+                rsi_period, rsi_threshold, top_k = combo
+                
+                try:
+                    # Get pre-computed RSI
+                    rsi_df = rsi_cache[rsi_period]
+                    
+                    # Generate weights using vectorized logic
+                    weights = self._generate_weights_fast(
+                        prices=prices,
+                        rsi_df=rsi_df,
+                        ensemble_entries=ensemble_entries,
+                        ensemble_exits=ensemble_exits,
+                        rsi_threshold=rsi_threshold,
+                        top_k=top_k,
+                        safe_haven_ticker=safe_haven_ticker,
+                        asset_columns=asset_columns,
+                    )
+                    
+                    # Compute portfolio metrics
+                    metrics = self._compute_portfolio_metrics(prices, weights)
+                    
+                    # Add parameters
+                    metrics['rsi_period'] = rsi_period
+                    metrics['rsi_threshold'] = rsi_threshold
+                    metrics['top_k'] = top_k
+                    
+                    self.results.append(metrics)
+                    
+                except Exception as e:
+                    # Skip failed combinations silently
+                    pass
+            
+            # Progress update
+            processed = min(batch_end, total)
+            print(f"Progress: {processed}/{total} ({(processed/total)*100:.1f}%) - {len(self.results)} valid results")
+        
+        return self.results
+    
+    def _generate_weights_fast(
+        self,
+        prices: pd.DataFrame,
+        rsi_df: pd.DataFrame,
+        ensemble_entries: pd.DataFrame,
+        ensemble_exits: pd.DataFrame,
+        rsi_threshold: float,
+        top_k: int,
+        safe_haven_ticker: str,
+        asset_columns: List[str],
+    ) -> pd.DataFrame:
+        """Generate weights using optimized pandas operations."""
+        # Initialize weights
+        weights = pd.DataFrame(0.0, index=prices.index, columns=prices.columns)
+        
+        # Vectorized: RSI above threshold mask
+        above_threshold = rsi_df > rsi_threshold
+        
+        # Vectorized: RSI ranks (descending)
+        rsi_ranks = rsi_df.rank(axis=1, method='dense', ascending=False)
+        
+        # Vectorized: top-K mask
+        top_k_mask = rsi_ranks <= top_k
+        
+        # Combined qualifying mask: above threshold AND in top-K AND entry signal AND NOT exit signal
+        qualifying_mask = (
+            above_threshold & 
+            top_k_mask & 
+            ensemble_entries & 
+            ~ensemble_exits
+        )
+        
+        # Count qualifying assets per row
+        num_qualifying = qualifying_mask.sum(axis=1)
+        
+        # Weight per asset when qualifying
+        weight_per_asset = 1.0 / top_k
+        
+        # Assign weights to qualifying assets
+        for asset in asset_columns:
+            weights[asset] = qualifying_mask[asset].astype(float) * weight_per_asset
+        
+        # Calculate remaining weight for safe haven
+        allocated_weight = weights[asset_columns].sum(axis=1)
+        remaining_weight = 1.0 - allocated_weight
+        
+        # Safe haven gets 50% of remaining (other 50% is cash)
+        weights[safe_haven_ticker] = remaining_weight * 0.5
+        
+        # Handle NaN RSI rows (early dates): 50% safe haven
+        nan_mask = rsi_df.isna().any(axis=1)
+        weights.loc[nan_mask, asset_columns] = 0.0
+        weights.loc[nan_mask, safe_haven_ticker] = 0.5
+        
+        return weights
+    
+    def _compute_portfolio_metrics(
+        self, 
+        prices: pd.DataFrame, 
+        weights: pd.DataFrame
+    ) -> Dict:
+        """Compute portfolio metrics from weights."""
+        # Get common columns
+        common_cols = list(set(prices.columns) & set(weights.columns))
+        prices_aligned = prices[common_cols]
+        weights_aligned = weights[common_cols]
+        
+        # Asset returns
+        asset_returns = prices_aligned.pct_change().fillna(0.0)
+        
+        # Transaction costs
+        weight_changes = weights_aligned.diff().abs().fillna(0.0)
+        turnover = weight_changes.sum(axis=1) / 2
+        transaction_cost_rate = self.config.fees + self.config.slippage
+        transaction_costs = turnover * transaction_cost_rate
+        
+        # Portfolio returns
+        prev_weights = weights_aligned.shift(1).fillna(0.0)
+        portfolio_returns_gross = (asset_returns * prev_weights).sum(axis=1)
+        portfolio_returns = portfolio_returns_gross - transaction_costs
+        
+        # Portfolio value
+        portfolio_value = (1 + portfolio_returns).cumprod() * self.config.init_cash
+        portfolio_value.iloc[0] = self.config.init_cash
+        
+        # Compute metrics
+        n_periods = len(portfolio_value)
+        periods_per_year = 252 if self.config.freq.upper() in ("D", "1D") else 52
+        years = n_periods / periods_per_year
+        
+        total_return = (portfolio_value.iloc[-1] / portfolio_value.iloc[0]) - 1.0
+        ann_return = (1 + total_return) ** (1 / max(years, 0.01)) - 1 if years > 0 else 0.0
+        ann_vol = portfolio_returns.std() * np.sqrt(periods_per_year) if len(portfolio_returns) > 1 else 0.0
+        
+        # Max drawdown
+        peak = portfolio_value.cummax()
+        drawdown = (portfolio_value - peak) / peak
+        max_dd = float(drawdown.min())
+        
+        # Sharpe ratio
+        sharpe = ann_return / ann_vol if ann_vol > 0 else np.nan
+        
+        # Trade count (weight changes > 1%)
+        trade_mask = (weight_changes > 0.01).any(axis=1)
+        n_trades = int(trade_mask.sum())
+        trades_per_year = n_trades / max(years, 0.01) if years > 0 else 0.0
+        
+        # Win rate
+        positive_returns = (portfolio_returns > 0).sum()
+        win_rate = positive_returns / len(portfolio_returns) if len(portfolio_returns) > 0 else 0.0
+        
+        return {
+            'total_return': total_return,
+            'annualized_return': ann_return,
+            'annualized_volatility': ann_vol,
+            'sharpe_ratio': sharpe,
+            'max_drawdown': max_dd,
+            'n_trades': n_trades,
+            'trades_per_year': trades_per_year,
+            'win_rate': win_rate,
+        }
+    
+    def best(self, metric: str = "sharpe_ratio") -> pd.Series:
+        """Get the best parameter combination by specified metric."""
+        if not self.results:
+            raise ValueError("Run grid search first.")
+        df = pd.DataFrame(self.results)
+        return df.sort_values(metric, ascending=False).iloc[0]
+
+
 class VectorizedGridSearch:
     """Vectorized grid search using vectorbt's batch processing capabilities.
     
     This class uses vectorbt's parameter broadcasting to compute thousands of
     indicator combinations simultaneously, then runs batch backtests.
     
-    Supports: triple_ema, triple_ema_unconstrained, triple_macd, ensemble, ensemble_unconstrained.
+    Supports: triple_ema, triple_ema_unconstrained, macd, ensemble, ensemble_unconstrained.
     
     Args:
         engine: BacktestEngine instance with configuration
@@ -455,7 +708,7 @@ class VectorizedGridSearch:
     SUPPORTED_STRATEGIES = [
         "triple_ema", 
         "triple_ema_unconstrained",
-        "triple_macd", 
+        "macd", 
         "ensemble",
         "ensemble_unconstrained",
     ]
@@ -578,7 +831,7 @@ class VectorizedGridSearch:
                         list(param_dict['ema_slow']),
                         common_cols
                     )
-                elif self.strategy_name == "triple_macd":
+                elif self.strategy_name == "macd":
                     entries, exits = _compute_macd_signals_batch(
                         close,
                         list(param_dict['fastperiod']),
