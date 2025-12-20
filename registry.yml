@@ -18,17 +18,17 @@ assets:
   BTC:
     strategy: ensemble_unconstrained
     params:
-      ema_fast: 4
-      ema_mid: 65
-      ema_slow: 120
-      fastperiod: 59
-      slowperiod: 126
-      signalperiod: 39
+      ema_fast: 25
+      ema_mid: 165
+      ema_slow: 100
+      fastperiod: 89
+      slowperiod: 116
+      signalperiod: 70
     last_optimized: '2025-12-19'
-    train_sharpe: null
-    val_sharpe: null
-    test_sharpe: null
-    stability_score: null
+    train_sharpe: 1.9466
+    val_sharpe: 1.3707
+    test_sharpe: 1.2189
+    stability_score: 0.9272
     data_source: alphavantage
     start_date: '2018-01-01'
   ETH:
