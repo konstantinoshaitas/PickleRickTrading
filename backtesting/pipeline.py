@@ -21,8 +21,9 @@ from .strategies.rsi_filter_portfolio import RSIFilterPortfolioStrategy
 def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.Series, pd.DataFrame]:
     """Fetch prices based on config, returning close series and full OHLCV frame.
     
-    Auto-resolves cache path to new asset-centric structure (assets/{TICKER}/cache.csv)
-    if it exists, otherwise falls back to config value or old path for backward compatibility.
+    Auto-resolves cache path to new asset-centric structure (assets/{TICKER}/cache.csv).
+    If cache_csv is not set in config, uses the new path (creating it if needed).
+    Falls back to config value for backward compatibility if explicitly set.
     """
     # Auto-resolve cache path to new asset-centric structure
     cache_csv = cfg.data.cache_csv
@@ -36,7 +37,8 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
             # Keep original if specified (for backward compatibility)
             cache_csv = cfg.data.cache_csv
         else:
-            cache_csv = None
+            # Use new path even if it doesn't exist yet (so it can be created)
+            cache_csv = str(new_cache_path)
     
     fetcher = DataFetcher(
         ticker=cfg.data.ticker,

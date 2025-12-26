@@ -14,8 +14,14 @@ python main.py --config config/default.yml backtest --plot
 # Examples
 python main.py --config config/ETH_test.yml backtest --plot
 python main.py --config config/ETH.yml backtest --plot
+# Backtest GOOG using optimized parameters from registry.yml
+python main.py backtest --ticker GOOG --plot
 
-python main.py --config config/portfolio_example.yml portfolio --plot
+# Save plots to directory
+python main.py backtest --ticker AAPL --plot --plot-dir plots/AAPL
+
+# Force refresh data
+python main.py backtest --ticker ETH --plot --refresh 
 ```
 
 ## Grid Search
@@ -27,6 +33,7 @@ python main.py --config config/wide.yml grid --n-jobs 12 --top 3 --batch-size 20
 python main.py --config config/wide_macd.yml grid --batch-size 5000 --min-trades 1.5 --output data/ETH_macd.parquet
 python main.py --config config/wide_ema.yml grid --batch-size 5000 --min-trades 1.5 --output data/ETH_ema.parquet
 
+# Portfolio grid
 python main.py --config config/portfolio_example.yml portfolio-grid --top 3 --output data/portfolio_grid_results.parquet
 ```
 
@@ -38,18 +45,17 @@ The `optimize` command automates the entire parameter selection process:
 
 ```bash
 # Optimize a single asset (uses templates/wide_ensemble_grid.yml)
-python main.py optimize --ticker GOOG --strategy ensemble_unconstrained
+python main.py optimize --ticker BTC --strategy ensemble_unconstrained
 
 # Optimize and save to registry
-python main.py optimize --ticker GOOG --strategy ensemble_unconstrained --save
+python main.py optimize --ticker ETH --strategy ensemble_unconstrained --save
 
-# With custom ratios
-python main.py optimize --ticker AAPL --template wide_macd_grid.yml --strategy macd `
-    --train-ratio 0.6 --val-ratio 0.2 --test-ratio 0.2 `
-    --transfer-threshold 0.5 --top-percent 0.01 --save
+# With custom ratios / custom config
+python main.py optimize --ticker TQQQ --template wide_ema_grid.yml --strategy triple_ema_unconstrained `
+    --train-ratio 0.6 --val-ratio 0.15 --test-ratio 0.25 `
+    --transfer-threshold 1.2 --top-percent 0.3 --save
 
-# Using a different template
-python main.py optimize --ticker ETH --template wide_ema_grid.yml --save
+
 ```
 
 The pipeline:

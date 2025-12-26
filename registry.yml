@@ -34,28 +34,28 @@ assets:
   ETH:
     strategy: ensemble_unconstrained
     params:
-      ema_fast: 16
-      ema_mid: 191
-      ema_slow: 67
+      ema_fast: 5
+      ema_mid: 115
+      ema_slow: 100
       fastperiod: 4
-      slowperiod: 45
-      signalperiod: 63
-    last_optimized: '2025-12-19'
-    train_sharpe: null
-    val_sharpe: null
-    test_sharpe: null
-    stability_score: null
-    data_source: alphavantage
+      slowperiod: 66
+      signalperiod: 55
+    last_optimized: '2025-12-20'
+    train_sharpe: 1.5286
+    val_sharpe: 1.219
+    test_sharpe: 1.2884
+    stability_score: 0.7671
+    data_source: yfinance
     start_date: '2018-01-01'
   GOOG:
     strategy: ensemble_unconstrained
     params:
       ema_fast: 7
-      ema_mid: 73
-      ema_slow: 217
-      fastperiod: 85
-      slowperiod: 92
-      signalperiod: 7
+      ema_mid: 66
+      ema_slow: 64
+      fastperiod: 67
+      slowperiod: 114
+      signalperiod: 8
     last_optimized: '2025-12-19'
     train_sharpe: null
     val_sharpe: null
@@ -141,5 +141,18 @@ assets:
     val_sharpe: 2.102988460796873
     test_sharpe: 2.3136768611685468
     stability_score: 0.7469268392381764
+    data_source: yfinance
+    start_date: '2018-01-01'
+  TQQQ:
+    strategy: triple_ema_unconstrained
+    params:
+      ema_fast: 5
+      ema_mid: 112
+      ema_slow: 221
+    last_optimized: '2025-12-20'
+    train_sharpe: 1.2173997126015952
+    val_sharpe: 1.521706511019724
+    test_sharpe: 0.8978102098443285
+    stability_score: 0.7249623538548899
     data_source: yfinance
     start_date: '2018-01-01'

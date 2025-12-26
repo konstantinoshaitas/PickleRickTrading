@@ -83,10 +83,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def cmd_fetch(cfg: WorkflowConfig, force: bool):
+    from backtesting.config import get_asset_cache_path
+    
     close, ohlcv = load_prices(cfg, force_download=force)
     print(f"Fetched {len(ohlcv)} rows for {cfg.data.ticker} ({ohlcv.index.min().date()} -> {ohlcv.index.max().date()})")
-    if cfg.data.cache_csv:
-        print(f"Cached at: {cfg.data.cache_csv}")
+    
+    # Show where data was cached (use auto-resolved path if config doesn't specify)
+    cache_path = cfg.data.cache_csv if cfg.data.cache_csv else str(get_asset_cache_path(cfg.data.ticker))
+    print(f"Cached at: {cache_path}")
     print(f"Latest close: {close.iloc[-1]:.2f}")
 
 

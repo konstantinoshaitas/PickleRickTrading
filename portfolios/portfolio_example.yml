@@ -5,7 +5,7 @@ data:
 
 strategy:
   # Default strategy if not overridden in 'assets'
-  name: ensemble
+  name: ensemble_unconstrained
   params:
     ema_fast: 21
     ema_mid: 55
@@ -26,27 +26,26 @@ grid:
 
 portfolio:
   tickers:
+    - AAPL
     - AMZN
     - BTC
     - ETH
-    # - AAPL
     - SOL
     - META
     - VOO
     - GOOG
-    # - MSFT 
-    # - AMZN
+    - QQQ
     - GLD
   safe_haven_ticker: GLD
   
   # Default portfolio parameters
-  rsi_period: 60
+  rsi_period: 90
   rsi_threshold: 50.0
   top_k: 3
 
   # Portfolio grid search parameters
   grid:
-    rsi_threshold: "40:60:1"
+    rsi_threshold: "45:55:2"
     top_k: "1:6:1"
     rsi_period: "10:110:1"
 
@@ -56,22 +55,22 @@ portfolio:
     BTC:
       strategy: ensemble_unconstrained  
       params:
-        ema_fast: 4
-        ema_mid: 65 
-        ema_slow: 120
-        fastperiod: 59
-        slowperiod: 126
-        signalperiod: 39
+        ema_fast: 25
+        ema_mid: 165
+        ema_slow: 100
+        fastperiod: 89
+        slowperiod: 116
+        signalperiod: 70
       # cache_csv: data/cache/custom_BTC_path.csv  # Optional: override auto-detected cache path
     ETH:
       strategy: ensemble_unconstrained
       params:
-        ema_fast: 16
-        ema_mid: 191
-        ema_slow: 67
+        ema_fast: 5
+        ema_mid: 115
+        ema_slow: 100
         fastperiod: 4
-        slowperiod: 45
-        signalperiod: 63
+        slowperiod: 66
+        signalperiod: 55
     
     AMZN:
       strategy: ensemble_unconstrained
@@ -118,3 +117,21 @@ portfolio:
         fastperiod: 85
         slowperiod: 92
         signalperiod: 7
+    AAPL:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 30
+        ema_mid: 85
+        ema_slow: 100
+        fastperiod: 9
+        slowperiod: 51
+        signalperiod: 80
+    QQQ:
+      strategy: ensemble_unconstrained
+      params:
+        ema_fast: 5
+        ema_mid: 85
+        ema_slow: 190
+        fastperiod: 39
+        slowperiod: 41
+        signalperiod: 55

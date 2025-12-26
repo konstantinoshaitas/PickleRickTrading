@@ -1,1 +1,12 @@
 Fix grid.py to use generator instead of materializing all combinations (line 508) for large grids
+
+
+```
+
+In optimize cli we need to fix the maths for transfer ratio as it barely filters enough, we could create a more sophisticated 
+equation for weighting and filtering the results, in same light, fix stability ratio to use more than x neighbours #TODO
+
+
+```
+
+

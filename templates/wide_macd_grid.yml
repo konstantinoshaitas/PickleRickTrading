@@ -1,9 +1,9 @@
 strategy:
   name: macd
   grid:
-    fastperiod: "4:90:2"
-    slowperiod: "6:150:2"
-    signalperiod: "5:100:2"
+    fastperiod: "4:90:1"
+    slowperiod: "6:150:1"
+    signalperiod: "5:120:1"
 optimization:
   train_ratio: 0.6
   val_ratio: 0.2

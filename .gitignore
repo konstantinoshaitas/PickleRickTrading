@@ -13,6 +13,7 @@ build/
 venv/
 ENV/
 env/
+.cursor/
 
 # Data files (cached/generated)
 data/cache/

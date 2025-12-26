@@ -1,9 +1,9 @@
 strategy:
   name: triple_ema_unconstrained
   grid:
-    ema_fast: "2:80:4"
-    ema_mid: "20:220:10"
-    ema_slow: "40:250:10"
+    ema_fast: "3:55:1"
+    ema_mid: "45:180:1"
+    ema_slow: "60:250:1"
 optimization:
   train_ratio: 0.6
   val_ratio: 0.2
