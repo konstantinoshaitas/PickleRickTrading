@@ -53,6 +53,10 @@ from .config import (
     load_template,
     save_registry,
     update_registry_entry,
+    calculate_warmup_from_grid,
+    extend_start_date,
+    InsufficientWarmupDataError,
+    InsufficientBacktestDataError,
 )
 from .data import DataFetcher, split_train_val_test, get_split_info
 from .grid import (
@@ -377,28 +381,49 @@ class AssetOptimizer:
             self.config.data.cache_csv = str(cache_path)
         
         # State
-        self.close: Optional[pd.Series] = None
+        self.close: Optional[pd.Series] = None  # Trimmed to original start (for backtest)
+        self.close_full: Optional[pd.Series] = None  # Full data including warmup (for indicators)
         self.train: Optional[pd.Series] = None
         self.val: Optional[pd.Series] = None
         self.test: Optional[pd.Series] = None
+        self.train_full: Optional[pd.Series] = None  # Train data + warmup for indicator calc
+        self.val_full: Optional[pd.Series] = None
+        self.test_full: Optional[pd.Series] = None
         self.split_info: Optional[Dict] = None
         self.result: Optional[OptimizationResult] = None
+        self.warmup_bars: int = 0
     
     def log(self, message: str):
         """Print message if verbose mode is enabled."""
         if self.verbose:
             print(message)
     
-    def load_data(self, force_download: bool = False) -> pd.Series:
-        """Load price data for the ticker.
+    def load_data(
+        self, 
+        force_download: bool = False,
+        allow_partial_warmup: bool = False,
+        min_backtest_bars: int = 252,
+    ) -> pd.Series:
+        """Load price data for the ticker with warmup support.
         
         Args:
             force_download: Force re-download even if cache exists
+            allow_partial_warmup: Allow proceeding with insufficient warmup data
+            min_backtest_bars: Minimum bars required for backtesting
             
         Returns:
-            Close price series
+            Close price series (trimmed to original start)
         """
         self.log(f"Loading data for {self.ticker}...")
+        
+        # Auto-calculate warmup from grid
+        if self.config.strategy.grid:
+            self.warmup_bars = calculate_warmup_from_grid(
+                self.config.strategy.grid, 
+                self.strategy
+            )
+            if self.warmup_bars > 0:
+                self.log(f"  Auto-calculated warmup: {self.warmup_bars} bars from grid")
         
         fetcher = DataFetcher(
             ticker=self.config.data.ticker,
@@ -408,18 +433,30 @@ class AssetOptimizer:
             data_source=self.config.data.data_source,
             asset_type=self.config.data.asset_type,
             cache_csv=self.config.data.cache_csv,
+            warmup_bars=self.warmup_bars,
         )
         
-        fetcher.load(force_download=force_download)
-        self.close = fetcher.close()
+        fetcher.load(
+            force_download=force_download,
+            validate_warmup=(self.warmup_bars > 0),
+            allow_partial_warmup=allow_partial_warmup,
+            min_backtest_bars=min_backtest_bars,
+        )
         
-        self.log(f"  Loaded {len(self.close)} bars")
-        self.log(f"  Date range: {self.close.index[0].date()} to {self.close.index[-1].date()}")
+        # Store both full data (with warmup) and trimmed data
+        self.close_full = fetcher.close()  # Includes warmup for indicator calculation
+        self.close = fetcher.close_trimmed()  # Trimmed to original start for backtest
+        
+        self.log(f"  Loaded {len(self.close_full)} bars (including {self.warmup_bars} warmup)")
+        self.log(f"  Backtest range: {self.close.index[0].date()} to {self.close.index[-1].date()}")
+        self.log(f"  Backtest bars: {len(self.close)}")
         
         return self.close
     
     def split_data(self) -> Tuple[pd.Series, pd.Series, pd.Series]:
         """Split data into train/val/test sets.
+        
+        Also creates corresponding full series (with warmup) for indicator calculation.
         
         Returns:
             Tuple of (train, val, test) series
@@ -427,12 +464,32 @@ class AssetOptimizer:
         if self.close is None:
             self.load_data()
         
+        # Split trimmed data for backtest evaluation
         self.train, self.val, self.test = split_train_val_test(
             self.close,
             train_ratio=self.opt_config.train_ratio,
             val_ratio=self.opt_config.val_ratio,
             test_ratio=self.opt_config.test_ratio,
         )
+        
+        # Create full series for indicator calculation (includes warmup)
+        if self.close_full is not None and self.warmup_bars > 0:
+            # For train, we need warmup + train data
+            train_end_idx = self.train.index[-1]
+            self.train_full = self.close_full[self.close_full.index <= train_end_idx].copy()
+            
+            # For val, we need enough lookback from val start
+            # Use the full data up to val end for proper indicator calculation
+            val_end_idx = self.val.index[-1]
+            self.val_full = self.close_full[self.close_full.index <= val_end_idx].copy()
+            
+            # For test, use all data up to test end
+            test_end_idx = self.test.index[-1]
+            self.test_full = self.close_full[self.close_full.index <= test_end_idx].copy()
+        else:
+            self.train_full = self.train
+            self.val_full = self.val
+            self.test_full = self.test
         
         self.split_info = get_split_info(
             self.close,
@@ -445,6 +502,8 @@ class AssetOptimizer:
         self.log(f"  TRAIN: {len(self.train)} bars ({self.split_info['train']['start'].date()} to {self.split_info['train']['end'].date()})")
         self.log(f"  VAL:   {len(self.val)} bars ({self.split_info['val']['start'].date()} to {self.split_info['val']['end'].date()})")
         self.log(f"  TEST:  {len(self.test)} bars ({self.split_info['test']['start'].date()} to {self.split_info['test']['end'].date()})")
+        if self.warmup_bars > 0:
+            self.log(f"  (Using {self.warmup_bars} warmup bars for indicator calculation)")
         
         return self.train, self.val, self.test
     
@@ -453,6 +512,7 @@ class AssetOptimizer:
         Phase 1: Wide grid search on TRAIN data.
         
         Runs vectorized grid search and keeps top N% by Sharpe ratio.
+        Uses warmup data for indicator calculation if available.
         
         Returns:
             List of top candidates from grid search
@@ -473,15 +533,18 @@ class AssetOptimizer:
             strategy_name=self.strategy,
             batch_size=5000,
             min_trades_per_year=self.opt_config.min_trades_per_year,
+            warmup_bars=self.warmup_bars,
         )
         
         if not self.config.strategy.grid:
             raise ValueError("No grid defined in config. Set strategy.grid in template.")
         
+        # Use train_full for indicator calculation, train for backtest evaluation
         search.run(
-            close=self.train,
+            close=self.train_full if self.warmup_bars > 0 else self.train,
             grid=self.config.strategy.grid,
             base_params=self.config.strategy.params,
+            backtest_close=self.train if self.warmup_bars > 0 else None,
         )
         
         if not search.results:
@@ -563,11 +626,23 @@ class AssetOptimizer:
         
         passed = []
         
+        # Use val_full for indicator calculation if warmup is enabled
+        indicator_series = self.val_full if self.warmup_bars > 0 else self.val
+        
         for i, candidate in enumerate(candidates):
             # Run backtest on validation
             try:
                 strategy = strategy_cls(**candidate.params)
-                entries, exits = strategy.generate_signals(self.val)
+                # Generate signals on full data (includes warmup)
+                entries, exits = strategy.generate_signals(indicator_series)
+                
+                # Trim signals to match val series if using warmup
+                if self.warmup_bars > 0:
+                    val_start = self.val.index[0]
+                    val_end = self.val.index[-1]
+                    entries = entries.loc[val_start:val_end]
+                    exits = exits.loc[val_start:val_end]
+                
                 portfolio = engine.run(self.val, (entries, exits))
                 metrics = compute_metrics(portfolio, self.val, self.config.backtest.freq)
                 
@@ -614,10 +689,13 @@ class AssetOptimizer:
         n_candidates = len(candidates)
         common_cols = pd.Index(range(n_candidates), name='candidate_id')
         
-        # Compute signals based on strategy type
+        # Use val_full for indicator calculation if warmup is enabled
+        indicator_series = self.val_full if self.warmup_bars > 0 else self.val
+        
+        # Compute signals based on strategy type (on full data with warmup)
         if self.strategy in ("triple_ema", "triple_ema_unconstrained"):
             entries, exits = _compute_ema_signals_batch(
-                self.val,
+                indicator_series,
                 param_lists['ema_fast'],
                 param_lists['ema_mid'],
                 param_lists['ema_slow'],
@@ -625,7 +703,7 @@ class AssetOptimizer:
             )
         elif self.strategy == "macd":
             entries, exits = _compute_macd_signals_batch(
-                self.val,
+                indicator_series,
                 param_lists['fastperiod'],
                 param_lists['slowperiod'],
                 param_lists['signalperiod'],
@@ -633,7 +711,7 @@ class AssetOptimizer:
             )
         elif self.strategy in ("ensemble", "ensemble_unconstrained"):
             entries, exits = _compute_ensemble_signals_batch(
-                self.val,
+                indicator_series,
                 param_lists['ema_fast'],
                 param_lists['ema_mid'],
                 param_lists['ema_slow'],
@@ -646,7 +724,14 @@ class AssetOptimizer:
             # Fallback to sequential if strategy not supported
             return self._run_phase2_sequential(candidates)
         
-        # Run batch backtest
+        # Trim signals to match val series if using warmup
+        if self.warmup_bars > 0:
+            val_start = self.val.index[0]
+            val_end = self.val.index[-1]
+            entries = entries.loc[val_start:val_end]
+            exits = exits.loc[val_start:val_end]
+        
+        # Run batch backtest on val (trimmed)
         pf = vbt.Portfolio.from_signals(
             close=self.val,
             entries=entries,
@@ -831,10 +916,13 @@ class AssetOptimizer:
         n_total = len(all_param_sets)
         common_cols = pd.Index(range(n_total), name='combo_id')
         
-        # Compute signals based on strategy type
+        # Use test_full for indicator calculation if warmup is enabled
+        indicator_series = self.test_full if self.warmup_bars > 0 else self.test
+        
+        # Compute signals based on strategy type (on full data with warmup)
         if self.strategy in ("triple_ema", "triple_ema_unconstrained"):
             entries, exits = _compute_ema_signals_batch(
-                self.test,
+                indicator_series,
                 param_lists['ema_fast'],
                 param_lists['ema_mid'],
                 param_lists['ema_slow'],
@@ -842,7 +930,7 @@ class AssetOptimizer:
             )
         elif self.strategy == "macd":
             entries, exits = _compute_macd_signals_batch(
-                self.test,
+                indicator_series,
                 param_lists['fastperiod'],
                 param_lists['slowperiod'],
                 param_lists['signalperiod'],
@@ -850,7 +938,7 @@ class AssetOptimizer:
             )
         elif self.strategy in ("ensemble", "ensemble_unconstrained"):
             entries, exits = _compute_ensemble_signals_batch(
-                self.test,
+                indicator_series,
                 param_lists['ema_fast'],
                 param_lists['ema_mid'],
                 param_lists['ema_slow'],
@@ -863,7 +951,14 @@ class AssetOptimizer:
             # Fallback to sequential if strategy not supported
             return self._run_phase3_sequential(candidates)
         
-        # Run batch backtest
+        # Trim signals to match test series if using warmup
+        if self.warmup_bars > 0:
+            test_start = self.test.index[0]
+            test_end = self.test.index[-1]
+            entries = entries.loc[test_start:test_end]
+            exits = exits.loc[test_start:test_end]
+        
+        # Run batch backtest on test (trimmed)
         pf = vbt.Portfolio.from_signals(
             close=self.test,
             entries=entries,
@@ -931,11 +1026,23 @@ class AssetOptimizer:
         engine = BacktestEngine(self.config.backtest)
         strategy_cls = StrategyFactory[self.strategy]
         
+        # Use test_full for indicator calculation if warmup is enabled
+        indicator_series = self.test_full if self.warmup_bars > 0 else self.test
+        
         for i, candidate in enumerate(candidates):
             try:
                 # Run on TEST data
                 strategy = strategy_cls(**candidate.params)
-                entries, exits = strategy.generate_signals(self.test)
+                # Generate signals on full data (includes warmup)
+                entries, exits = strategy.generate_signals(indicator_series)
+                
+                # Trim signals to match test series if using warmup
+                if self.warmup_bars > 0:
+                    test_start = self.test.index[0]
+                    test_end = self.test.index[-1]
+                    entries = entries.loc[test_start:test_end]
+                    exits = exits.loc[test_start:test_end]
+                
                 portfolio = engine.run(self.test, (entries, exits))
                 metrics = compute_metrics(portfolio, self.test, self.config.backtest.freq)
                 
@@ -953,7 +1060,13 @@ class AssetOptimizer:
                 for neighbor_params in neighbors:
                     try:
                         n_strategy = strategy_cls(**neighbor_params)
-                        n_entries, n_exits = n_strategy.generate_signals(self.test)
+                        n_entries, n_exits = n_strategy.generate_signals(indicator_series)
+                        
+                        # Trim neighbor signals too
+                        if self.warmup_bars > 0:
+                            n_entries = n_entries.loc[test_start:test_end]
+                            n_exits = n_exits.loc[test_start:test_end]
+                        
                         n_portfolio = engine.run(self.test, (n_entries, n_exits))
                         n_metrics = compute_metrics(n_portfolio, self.test, self.config.backtest.freq)
                         neighbor_sharpes.append(n_metrics.get('sharpe_ratio', 0))

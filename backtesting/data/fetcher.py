@@ -27,9 +27,11 @@ class DataFetcher:
         asset_type: Optional[str] = None,
         local_csv: Optional[str] = None,
         cache_csv: Optional[str] = None,
+        warmup_bars: int = 0,
     ):
         self.ticker = ticker
-        self.start = start
+        self.original_start = start  # User's intended start date
+        self.warmup_bars = warmup_bars
         self.end = end
         self.interval = interval
         self.data_source = data_source.lower()
@@ -37,29 +39,151 @@ class DataFetcher:
         self.local_csv = Path(local_csv) if local_csv else None
         self.cache_csv = Path(cache_csv) if cache_csv else None
         self.data: Optional[pd.DataFrame] = None
+        
+        # Calculate extended start date for warmup
+        if warmup_bars > 0:
+            from ..config import extend_start_date
+            self.start = extend_start_date(start, warmup_bars, interval)
+        else:
+            self.start = start
     
-    def load(self, force_download: bool = False) -> pd.DataFrame:
+    def load(
+        self, 
+        force_download: bool = False,
+        validate_warmup: bool = True,
+        allow_partial_warmup: bool = False,
+        min_backtest_bars: int = 252,
+    ) -> pd.DataFrame:
+        """Load price data with warmup validation.
+        
+        Args:
+            force_download: Force fresh download (ignore cache)
+            validate_warmup: Whether to validate warmup coverage (default True)
+            allow_partial_warmup: Allow proceeding with insufficient warmup (with warning)
+            min_backtest_bars: Minimum bars required for backtesting (default 252 = ~1 year)
+            
+        Returns:
+            DataFrame with OHLCV data
+            
+        Raises:
+            InsufficientWarmupDataError: If warmup data is insufficient
+            InsufficientBacktestDataError: If not enough data remains after warmup
+            ValueError: For other data loading errors
+        """
+        from ..config import (
+            InsufficientWarmupDataError,
+            InsufficientBacktestDataError,
+            DataDownloadError,
+            print_warmup_analysis,
+        )
+        
+        # Step 1: Try to load from cache
         if not force_download:
             if self.local_csv and self.local_csv.exists():
                 self.data = self._read_csv(self.local_csv)
             elif self.cache_csv and self.cache_csv.exists():
                 self.data = self._read_csv(self.cache_csv)
+        
+        # Step 2: Check if cache has warmup coverage, download if not
+        if self.data is not None and not self.data.empty and self.warmup_bars > 0:
+            self._normalize_frame()
+            cache_start = self.data.index.min()
+            required_start = pd.to_datetime(self.start)
+            
+            if cache_start > required_start:
+                # Cache doesn't have enough history - try re-downloading
+                print(f"Cache missing warmup data (starts {cache_start.strftime('%Y-%m-%d')}, "
+                      f"need {self.start}). Attempting download...")
+                self.data = None  # Clear cache to trigger download
+        
+        # Step 3: Download if needed
         if self.data is None or self.data.empty:
             self.data = self._download_with_retry()
             if self.cache_csv and not self.data.empty:
                 self.cache_csv.parent.mkdir(parents=True, exist_ok=True)
                 self.data.to_csv(self.cache_csv)
+        
         self._normalize_frame()
         self._apply_date_window()
+        
         if self.data.empty:
-            raise ValueError(
+            raise DataDownloadError(
                 f"No data found for ticker '{self.ticker}' with parameters "
                 f"(start={self.start}, end={self.end}, interval={self.interval}, "
                 f"source={self.data_source}). "
                 "This could be due to: network issues, API problems, "
-                "or invalid ticker/date range."
+                "or invalid ticker/date range.",
+                ticker=self.ticker
             )
+        
+        # Step 4: Validate warmup if required
+        if validate_warmup and self.warmup_bars > 0:
+            self._validate_warmup(allow_partial_warmup, min_backtest_bars)
+        
         return self.data
+    
+    def _validate_warmup(
+        self, 
+        allow_partial_warmup: bool = False,
+        min_backtest_bars: int = 252
+    ) -> None:
+        """Validate warmup coverage and print analysis.
+        
+        Args:
+            allow_partial_warmup: Allow proceeding with insufficient warmup
+            min_backtest_bars: Minimum bars required for backtesting
+            
+        Raises:
+            InsufficientWarmupDataError: If warmup is insufficient and not allowed
+            InsufficientBacktestDataError: If not enough data remains after warmup
+        """
+        from ..config import (
+            InsufficientWarmupDataError,
+            InsufficientBacktestDataError,
+            print_warmup_analysis,
+        )
+        
+        warmup_info = self.get_warmup_info()
+        original_start_dt = pd.to_datetime(self.original_start)
+        
+        # Count backtest bars (data after original start)
+        backtest_data = self.data[self.data.index >= original_start_dt]
+        backtest_bars = len(backtest_data)
+        
+        # Print warmup analysis
+        max_indicator = f"warmup={self.warmup_bars}"  # Will be replaced with actual indicator name in pipeline
+        print_warmup_analysis(
+            ticker=self.ticker,
+            required_warmup=self.warmup_bars,
+            max_indicator=max_indicator,
+            original_start=self.original_start,
+            extended_start=self.start,
+            available_warmup=warmup_info["available"],
+            backtest_bars=backtest_bars,
+        )
+        
+        # Check warmup sufficiency
+        if not warmup_info["is_sufficient"]:
+            if allow_partial_warmup:
+                print(f"\n⚠️  WARNING: Proceeding with partial warmup ({warmup_info['available']}/{self.warmup_bars} bars)")
+                print("   First indicator values may be inaccurate!")
+            else:
+                earliest = warmup_info["data_start"]
+                raise InsufficientWarmupDataError(
+                    ticker=self.ticker,
+                    required=self.warmup_bars,
+                    available=warmup_info["available"],
+                    earliest_available=earliest
+                )
+        
+        # Check sufficient backtest data
+        if backtest_bars < min_backtest_bars:
+            raise InsufficientBacktestDataError(
+                total=len(self.data),
+                warmup=self.warmup_bars,
+                remaining=backtest_bars,
+                minimum=min_backtest_bars
+            )
     
     def _detect_asset_type(self) -> str:
         """Detect asset type from ticker format or use explicit setting.
@@ -509,6 +633,71 @@ class DataFetcher:
         close = self.data["Close"]
         if isinstance(close, pd.DataFrame):
             # Select the first column if yfinance returned a multi-index frame
+            close = close.iloc[:, 0]
+        close = pd.to_numeric(close, errors="coerce")
+        close = close.dropna()
+        close.name = "close"
+        return close.squeeze()
+    
+    def get_warmup_info(self) -> dict:
+        """Get information about warmup coverage.
+        
+        Returns:
+            Dictionary with warmup details:
+            - required: Required warmup bars
+            - available: Actual warmup bars available
+            - is_sufficient: Whether warmup is sufficient
+            - data_start: Actual start date of data
+            - original_start: User's intended start date
+        """
+        if self.data is None:
+            raise ValueError("Call load() first.")
+        
+        original_start_dt = pd.to_datetime(self.original_start)
+        
+        # Count bars before original start date
+        warmup_data = self.data[self.data.index < original_start_dt]
+        available_warmup = len(warmup_data)
+        
+        return {
+            "required": self.warmup_bars,
+            "available": available_warmup,
+            "is_sufficient": available_warmup >= self.warmup_bars,
+            "shortfall": max(0, self.warmup_bars - available_warmup),
+            "data_start": self.data.index.min().strftime('%Y-%m-%d') if len(self.data) > 0 else None,
+            "original_start": self.original_start,
+            "extended_start": self.start,
+        }
+    
+    def trim_to_original_start(self) -> pd.DataFrame:
+        """Trim data to start from the original start date.
+        
+        This returns data starting from the user's intended start date,
+        excluding the warmup period. Use this after indicator calculation.
+        
+        Returns:
+            DataFrame trimmed to original date range
+        """
+        if self.data is None:
+            raise ValueError("Call load() first.")
+        
+        original_start_dt = pd.to_datetime(self.original_start)
+        return self.data[self.data.index >= original_start_dt].copy()
+    
+    def close_trimmed(self) -> pd.Series:
+        """Get close prices trimmed to original start date (excluding warmup).
+        
+        Returns:
+            Close price series starting from original_start
+        """
+        if self.data is None:
+            raise ValueError("Call load() first.")
+        
+        original_start_dt = pd.to_datetime(self.original_start)
+        trimmed_data = self.data[self.data.index >= original_start_dt]
+        
+        close = trimmed_data["Close"]
+        if isinstance(close, pd.DataFrame):
             close = close.iloc[:, 0]
         close = pd.to_numeric(close, errors="coerce")
         close = close.dropna()

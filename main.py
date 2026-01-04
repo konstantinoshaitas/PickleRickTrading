@@ -85,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_fetch(cfg: WorkflowConfig, force: bool):
     from backtesting.config import get_asset_cache_path
     
-    close, ohlcv = load_prices(cfg, force_download=force)
+    close, ohlcv, _ = load_prices(cfg, force_download=force)
     print(f"Fetched {len(ohlcv)} rows for {cfg.data.ticker} ({ohlcv.index.min().date()} -> {ohlcv.index.max().date()})")
     
     # Show where data was cached (use auto-resolved path if config doesn't specify)
@@ -137,7 +137,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
     print("=" * 70)
     print()
     
-    close, _ = load_prices(cfg, force_download=refresh)
+    close, _, _ = load_prices(cfg, force_download=refresh)
     metrics = run_single_backtest(cfg, close, return_portfolios=plot)
     
     train_start, train_end = metrics["train_window"]
@@ -176,7 +176,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved full_sample_equity.png")
+                print("  [OK] Saved full_sample_equity.png")
         
         # 2. Equity curves (train/validation comparison - original view)
         if "val_portfolio" in metrics:
@@ -196,7 +196,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved equity_curves.png")
+                print("  [OK] Saved equity_curves.png")
         
         # 3. Drawdowns (validation set)
         if "val_portfolio" in metrics:
@@ -209,7 +209,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved drawdowns.png")
+                print("  [OK] Saved drawdowns.png")
         
         # 4. Signals (validation set)
         if "val_entries" in metrics:
@@ -222,7 +222,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved signals.png")
+                print("  [OK] Saved signals.png")
         
         # 5. Trade-by-trade returns (validation set)
         if "val_portfolio" in metrics:
@@ -233,7 +233,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved trade_returns.png")
+                print("  [OK] Saved trade_returns.png")
         
         # 6. Rolling Sharpe ratio (validation set)
         if "val_portfolio" in metrics:
@@ -246,7 +246,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved rolling_sharpe_val.png")
+                print("  [OK] Saved rolling_sharpe_val.png")
         
         # 7. Rolling Sharpe ratio (train set)
         if "train_portfolio" in metrics:
@@ -259,7 +259,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved rolling_sharpe_train.png")
+                print("  [OK] Saved rolling_sharpe_train.png")
         
         # 8. Cumulative equity per trade (validation set)
         if "val_portfolio" in metrics:
@@ -270,7 +270,7 @@ def cmd_backtest(cfg: WorkflowConfig, refresh: bool, plot: bool, plot_dir: Optio
                 save_path=save_path,
             )
             if plot_dir:
-                print("  ✓ Saved cumulative_equity.png")
+                print("  [OK] Saved cumulative_equity.png")
         
         if not plot_dir:
             print("\nPlots displayed. Close windows to continue.")
@@ -285,7 +285,7 @@ def cmd_grid(cfg: WorkflowConfig, refresh: bool, top: int, output: Optional[Path
     from backtesting.config import get_asset_results_dir
     from datetime import datetime
     
-    close, _ = load_prices(cfg, force_download=refresh)
+    close, _, _ = load_prices(cfg, force_download=refresh)
     search = run_grid_search(cfg, close, n_jobs=n_jobs, min_trades_per_year=min_trades, batch_size=batch_size)
     df = pd.DataFrame(search.results)
     if df.empty:
@@ -382,7 +382,7 @@ def cmd_portfolio(cfg: WorkflowConfig, plot: bool, plot_dir: Optional[Path]):
                     save_path=save_path,
                 )
                 if plot_dir:
-                    print("  ✓ Saved portfolio_equity.png")
+                    print("  [OK] Saved portfolio_equity.png")
                 
                 # Plot drawdowns (Validation)
                 save_path = (plot_dir / "portfolio_drawdowns.png") if plot_dir else None
@@ -394,7 +394,7 @@ def cmd_portfolio(cfg: WorkflowConfig, plot: bool, plot_dir: Optional[Path]):
                     save_path=save_path,
                 )
                 if plot_dir:
-                    print("  ✓ Saved portfolio_drawdowns.png")
+                    print("  [OK] Saved portfolio_drawdowns.png")
             
             if not plot_dir:
                 print("\nPlots displayed. Close windows to continue.")
@@ -532,9 +532,9 @@ def cmd_optimize(
         # Save to registry if requested
         if save and result.best_candidate:
             optimizer.save_to_registry()
-            print(f"\n✓ Saved best candidate to registry.yml")
+            print(f"\n[OK] Saved best candidate to registry.yml")
         elif save:
-            print("\n✗ No candidates to save")
+            print("\n[X] No candidates to save")
             
     except Exception as e:
         print(f"\nError during optimization: {e}")

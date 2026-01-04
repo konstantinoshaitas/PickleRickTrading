@@ -51,7 +51,7 @@ python main.py optimize --ticker BTC --strategy ensemble_unconstrained
 python main.py optimize --ticker ETH --strategy ensemble_unconstrained --save
 
 # With custom ratios / custom config
-python main.py optimize --ticker TQQQ --template wide_ema_grid.yml --strategy triple_ema_unconstrained `
+python main.py optimize --ticker GOOG --template wide_macd_grid.yml --strategy macd `
     --train-ratio 0.6 --val-ratio 0.15 --test-ratio 0.25 `
     --transfer-threshold 1.2 --top-percent 0.3 --save
 

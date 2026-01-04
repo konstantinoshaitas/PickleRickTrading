@@ -5,7 +5,7 @@ Loads multiple assets into a single DataFrame with aligned dates using inner joi
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -18,6 +18,9 @@ def load_multi_asset_prices(
     config: DataConfig,
     force_download: bool = False,
     per_asset_cache_csv: Optional[Dict[str, str]] = None,
+    warmup_bars: int = 0,
+    allow_partial_warmup: bool = False,
+    min_backtest_bars: int = 252,
 ) -> pd.DataFrame:
     """Load close prices for multiple assets into a single DataFrame.
     
@@ -26,6 +29,9 @@ def load_multi_asset_prices(
         config: DataConfig with data source, date range, interval, etc.
         force_download: If True, force download even if cached data exists
         per_asset_cache_csv: Optional dict mapping ticker -> cache_csv path for overrides
+        warmup_bars: Number of warmup bars to include (for indicator calculation)
+        allow_partial_warmup: Allow proceeding with insufficient warmup data
+        min_backtest_bars: Minimum bars required for backtesting
         
     Returns:
         DataFrame with columns = tickers, index = dates (DatetimeIndex)
@@ -43,8 +49,14 @@ def load_multi_asset_prices(
     if not tickers:
         raise ValueError("tickers list cannot be empty")
     
+    # Use warmup_bars from config if not explicitly provided
+    if warmup_bars == 0:
+        warmup_bars = config.warmup_bars
+    
     # Load close prices for each ticker
     close_series_list = []
+    fetchers = []
+    
     for ticker in tickers:
         # Determine cache_csv path for this ticker
         # Priority: 1) per-asset override, 2) auto-construct from config, 3) use config as-is
@@ -80,11 +92,18 @@ def load_multi_asset_prices(
             asset_type=config.asset_type,
             local_csv=config.local_csv,
             cache_csv=ticker_cache_csv,
+            warmup_bars=warmup_bars,
         )
-        ohlcv = fetcher.load(force_download=force_download)
+        ohlcv = fetcher.load(
+            force_download=force_download,
+            validate_warmup=(warmup_bars > 0),
+            allow_partial_warmup=allow_partial_warmup,
+            min_backtest_bars=min_backtest_bars,
+        )
         close = fetcher.close()
         close.name = ticker  # Name the series with the ticker
         close_series_list.append(close)
+        fetchers.append(fetcher)
     
     # Concatenate all series into a DataFrame with inner join
     # This ensures we only keep dates where ALL assets have data
@@ -103,4 +122,87 @@ def load_multi_asset_prices(
         )
     
     return prices_df
+
+
+def load_multi_asset_prices_with_warmup(
+    tickers: List[str],
+    config: DataConfig,
+    warmup_bars: int,
+    force_download: bool = False,
+    per_asset_cache_csv: Optional[Dict[str, str]] = None,
+    allow_partial_warmup: bool = False,
+    min_backtest_bars: int = 252,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Load prices with separate full (warmup) and trimmed DataFrames.
+    
+    Args:
+        tickers: List of asset tickers
+        config: DataConfig
+        warmup_bars: Number of warmup bars for indicators
+        force_download: Force download
+        per_asset_cache_csv: Per-asset cache overrides
+        allow_partial_warmup: Allow partial warmup
+        min_backtest_bars: Minimum bars for backtesting
+        
+    Returns:
+        Tuple of (prices_full, prices_trimmed):
+        - prices_full: Full data including warmup (for indicator calculation)
+        - prices_trimmed: Trimmed to original start (for backtest evaluation)
+    """
+    if not tickers:
+        raise ValueError("tickers list cannot be empty")
+    
+    # Load both full and trimmed data for each ticker
+    full_series_list = []
+    trimmed_series_list = []
+    
+    for ticker in tickers:
+        ticker_cache_csv = None
+        
+        if per_asset_cache_csv and ticker in per_asset_cache_csv:
+            ticker_cache_csv = per_asset_cache_csv[ticker]
+        else:
+            new_path = get_asset_cache_path(ticker)
+            if new_path.exists():
+                ticker_cache_csv = str(new_path)
+        
+        fetcher = DataFetcher(
+            ticker=ticker,
+            start=config.start,
+            end=config.end,
+            interval=config.interval,
+            data_source=config.data_source,
+            asset_type=config.asset_type,
+            local_csv=config.local_csv,
+            cache_csv=ticker_cache_csv,
+            warmup_bars=warmup_bars,
+        )
+        fetcher.load(
+            force_download=force_download,
+            validate_warmup=(warmup_bars > 0),
+            allow_partial_warmup=allow_partial_warmup,
+            min_backtest_bars=min_backtest_bars,
+        )
+        
+        # Full close (including warmup)
+        full_close = fetcher.close()
+        full_close.name = ticker
+        full_series_list.append(full_close)
+        
+        # Trimmed close (from original start)
+        trimmed_close = fetcher.close_trimmed()
+        trimmed_close.name = ticker
+        trimmed_series_list.append(trimmed_close)
+    
+    # Concatenate with inner join
+    prices_full = pd.concat(full_series_list, axis=1, join='inner').sort_index().dropna()
+    prices_trimmed = pd.concat(trimmed_series_list, axis=1, join='inner').sort_index().dropna()
+    
+    if prices_trimmed.empty:
+        raise ValueError(
+            f"No overlapping dates found for tickers {tickers}. "
+            "Check date ranges and data availability."
+        )
+    
+    return prices_full, prices_trimmed
 

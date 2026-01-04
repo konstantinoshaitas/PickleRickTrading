@@ -48,20 +48,17 @@ assets:
     data_source: yfinance
     start_date: '2018-01-01'
   GOOG:
-    strategy: ensemble_unconstrained
+    strategy: macd
     params:
-      ema_fast: 7
-      ema_mid: 66
-      ema_slow: 64
-      fastperiod: 67
-      slowperiod: 114
-      signalperiod: 8
-    last_optimized: '2025-12-19'
-    train_sharpe: null
-    val_sharpe: null
-    test_sharpe: null
-    stability_score: null
-    data_source: alphavantage
+      fastperiod: 66
+      slowperiod: 116
+      signalperiod: 22
+    last_optimized: '2026-01-04'
+    train_sharpe: 1.0615948417609378
+    val_sharpe: 1.6879075952175455
+    test_sharpe: 1.69458015042279
+    stability_score: 1.0093696745732972
+    data_source: yfinance
     start_date: '2018-01-01'
   META:
     strategy: ensemble_unconstrained

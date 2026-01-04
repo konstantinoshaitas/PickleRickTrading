@@ -10,7 +10,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from .backtest import BacktestEngine, PortfolioBuilder
-from .config import WorkflowConfig, get_asset_cache_path
+from .config import (
+    WorkflowConfig, 
+    get_asset_cache_path,
+    calculate_warmup_from_grid,
+    calculate_warmup_from_params,
+)
 from .data import DataFetcher, load_multi_asset_prices, split_train_val
 from .grid import GridSearch, VectorizedGridSearch, VectorizedPortfolioGridSearch
 from .metrics import buy_and_hold, compute_metrics
@@ -18,12 +23,31 @@ from .strategies import StrategyFactory
 from .strategies.rsi_filter_portfolio import RSIFilterPortfolioStrategy
 
 
-def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.Series, pd.DataFrame]:
+def load_prices(
+    cfg: WorkflowConfig, 
+    force_download: bool = False,
+    warmup_bars: Optional[int] = None,
+    allow_partial_warmup: bool = False,
+    min_backtest_bars: int = 252,
+) -> Tuple[pd.Series, pd.DataFrame, "DataFetcher"]:
     """Fetch prices based on config, returning close series and full OHLCV frame.
     
     Auto-resolves cache path to new asset-centric structure (assets/{TICKER}/cache.csv).
     If cache_csv is not set in config, uses the new path (creating it if needed).
     Falls back to config value for backward compatibility if explicitly set.
+    
+    Args:
+        cfg: Workflow configuration
+        force_download: Force fresh download (ignore cache)
+        warmup_bars: Override warmup bars (None = use cfg.data.warmup_bars or auto-calculate)
+        allow_partial_warmup: Allow proceeding with insufficient warmup
+        min_backtest_bars: Minimum bars required for backtesting (default 252)
+        
+    Returns:
+        Tuple of (close_series, ohlcv_dataframe, fetcher)
+        - close_series: Close prices (including warmup period for indicator calculation)
+        - ohlcv_dataframe: Full OHLCV data (including warmup)
+        - fetcher: DataFetcher instance (use fetcher.close_trimmed() for backtest evaluation)
     """
     # Auto-resolve cache path to new asset-centric structure
     cache_csv = cfg.data.cache_csv
@@ -40,6 +64,19 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
             # Use new path even if it doesn't exist yet (so it can be created)
             cache_csv = str(new_cache_path)
     
+    # Determine warmup bars
+    if warmup_bars is None:
+        warmup_bars = cfg.data.warmup_bars
+        
+        # Auto-calculate from grid if warmup_bars is 0 and grid exists
+        if warmup_bars == 0 and cfg.strategy.grid:
+            warmup_bars = calculate_warmup_from_grid(cfg.strategy.grid, cfg.strategy.name)
+            if warmup_bars > 0:
+                print(f"Auto-calculated warmup: {warmup_bars} bars from grid")
+        elif warmup_bars == 0 and cfg.strategy.params:
+            # Calculate from params for single backtest
+            warmup_bars = calculate_warmup_from_params(cfg.strategy.params, cfg.strategy.name)
+    
     fetcher = DataFetcher(
         ticker=cfg.data.ticker,
         start=cfg.data.start,
@@ -49,29 +86,72 @@ def load_prices(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.S
         asset_type=cfg.data.asset_type,
         local_csv=cfg.data.local_csv,
         cache_csv=cache_csv,
+        warmup_bars=warmup_bars,
     )
-    ohlcv = fetcher.load(force_download=force_download)
+    ohlcv = fetcher.load(
+        force_download=force_download,
+        validate_warmup=(warmup_bars > 0),
+        allow_partial_warmup=allow_partial_warmup,
+        min_backtest_bars=min_backtest_bars,
+    )
     close = fetcher.close()
+    return close, ohlcv, fetcher
+
+
+def load_prices_legacy(cfg: WorkflowConfig, force_download: bool = False) -> Tuple[pd.Series, pd.DataFrame]:
+    """Legacy load_prices for backward compatibility (no warmup).
+    
+    Deprecated: Use load_prices() instead for new code.
+    """
+    close, ohlcv, _ = load_prices(cfg, force_download=force_download, warmup_bars=0)
     return close, ohlcv
 
 
-def run_single_backtest(cfg: WorkflowConfig, close: pd.Series, return_portfolios: bool = False) -> Dict[str, Any]:
+def run_single_backtest(
+    cfg: WorkflowConfig, 
+    close: pd.Series, 
+    return_portfolios: bool = False,
+    close_full: Optional[pd.Series] = None,
+) -> Dict[str, Any]:
     """Run the configured strategy on train/validation splits.
     
     Args:
         cfg: Workflow configuration
-        close: Price series
+        close: Price series for backtest evaluation (trimmed to original start, no warmup)
         return_portfolios: If True, include portfolio objects and signals in output for plotting
+        close_full: Full price series including warmup period for indicator calculation.
+                   If None, uses close for both indicator calculation and backtest.
         
     Returns:
         Dictionary with metrics and optionally portfolios/signals for visualization
+        
+    Note:
+        When using warmup, pass close_full containing the warmup period for indicator 
+        calculation and close trimmed to original start for backtest evaluation.
     """
+    # Use full series for indicator calculation if provided
+    indicator_close = close_full if close_full is not None else close
+    
     train_close, val_close = split_train_val(close, cfg.backtest.train_ratio)
     strategy_cls = StrategyFactory[cfg.strategy.name]
     strategy = strategy_cls(**cfg.strategy.params)
     engine = BacktestEngine(cfg.backtest)
     
-    train_entries, train_exits = strategy.generate_signals(train_close)
+    # Calculate indicators on full data (including warmup) then trim
+    if close_full is not None:
+        # Get the train/val split points from trimmed data
+        train_start = train_close.index[0]
+        train_end = train_close.index[-1]
+        
+        # Generate signals on full data
+        full_entries, full_exits = strategy.generate_signals(indicator_close)
+        
+        # Trim signals to match train close
+        train_entries = full_entries.loc[train_start:train_end]
+        train_exits = full_exits.loc[train_start:train_end]
+    else:
+        train_entries, train_exits = strategy.generate_signals(train_close)
+    
     train_portfolio = engine.run(train_close, (train_entries, train_exits))
     train_metrics = compute_metrics(train_portfolio, train_close, cfg.backtest.freq)
     
@@ -87,7 +167,14 @@ def run_single_backtest(cfg: WorkflowConfig, close: pd.Series, return_portfolios
         outputs["train_close"] = train_close
     
     if len(val_close) > 0:
-        val_entries, val_exits = strategy.generate_signals(val_close)
+        if close_full is not None:
+            val_start = val_close.index[0]
+            val_end = val_close.index[-1]
+            val_entries = full_entries.loc[val_start:val_end]
+            val_exits = full_exits.loc[val_start:val_end]
+        else:
+            val_entries, val_exits = strategy.generate_signals(val_close)
+            
         val_portfolio = engine.run(val_close, (val_entries, val_exits))
         outputs["validation"] = compute_metrics(val_portfolio, val_close, cfg.backtest.freq)
         outputs["benchmark"] = buy_and_hold(val_close, cfg.backtest)
@@ -108,17 +195,23 @@ def run_grid_search(
     n_jobs: Optional[int] = None,
     use_vectorized: bool = True,
     batch_size: int = 5000,
-    min_trades_per_year: float = 0.5
+    min_trades_per_year: float = 0.5,
+    close_full: Optional[pd.Series] = None,
+    warmup_bars: int = 0,
 ):
     """Execute grid search on the training slice.
     
     Args:
         cfg: Workflow configuration
-        close: Price series
+        close: Price series (trimmed to original start - used for backtest)
         n_jobs: Number of CPU cores to use (default: all - 1)
         use_vectorized: Use vectorized grid search for supported strategies (default: True)
         batch_size: Batch size for vectorized search (default: 5000)
         min_trades_per_year: Minimum trades per year filter for vectorized search (default: 2.0)
+        close_full: Full price series including warmup period for indicator calculation.
+                   If provided with warmup_bars > 0, indicators are calculated on this 
+                   and then trimmed to match close.
+        warmup_bars: Number of warmup bars in close_full (used for trimming)
         
     Returns:
         GridSearch or VectorizedGridSearch object with results
@@ -132,11 +225,24 @@ def run_grid_search(
         - ensemble_unconstrained
         
         For other strategies, falls back to multiprocessing-based GridSearch.
+        
+        When close_full and warmup_bars are provided, indicators are calculated
+        on the full series and then trimmed to the original start date for backtesting.
     """
     if not cfg.strategy.grid:
         raise ValueError("No grid defined in config.")
     
+    # Use full close for indicator calculation if provided
+    indicator_close = close_full if close_full is not None else close
+    
     train_close, _ = split_train_val(close, cfg.backtest.train_ratio)
+    
+    # Also split indicator close if using warmup
+    if close_full is not None and warmup_bars > 0:
+        train_indicator_close, _ = split_train_val(indicator_close, cfg.backtest.train_ratio)
+    else:
+        train_indicator_close = train_close
+    
     engine = BacktestEngine(cfg.backtest)
     
     # Check if vectorized search is available for this strategy
@@ -149,15 +255,28 @@ def run_grid_search(
             strategy_name=cfg.strategy.name,
             batch_size=batch_size,
             n_jobs=n_jobs,
-            min_trades_per_year=min_trades_per_year
+            min_trades_per_year=min_trades_per_year,
+            warmup_bars=warmup_bars,
+        )
+        # Pass both indicator close (for signal calc) and train close (for backtest)
+        search.run(
+            train_indicator_close, 
+            cfg.strategy.grid, 
+            cfg.strategy.params,
+            backtest_close=train_close if warmup_bars > 0 else None,
         )
     else:
         if use_vectorized and cfg.strategy.name not in vectorized_strategies:
             print(f"Note: Strategy '{cfg.strategy.name}' not supported for vectorization. Using GridSearch.")
         strategy_cls = StrategyFactory[cfg.strategy.name]
-        search = GridSearch(engine, strategy_cls, n_jobs=n_jobs)
+        search = GridSearch(engine, strategy_cls, n_jobs=n_jobs, warmup_bars=warmup_bars)
+        search.run(
+            train_indicator_close, 
+            cfg.strategy.grid, 
+            cfg.strategy.params,
+            backtest_close=train_close if warmup_bars > 0 else None,
+        )
     
-    search.run(train_close, cfg.strategy.grid, cfg.strategy.params)
     return search
 
 

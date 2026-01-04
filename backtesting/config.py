@@ -28,6 +28,7 @@ class DataConfig:
     asset_type: Optional[str] = None  # Options: "crypto", "stock", or None (auto-detect)
     local_csv: Optional[str] = None
     cache_csv: Optional[str] = None  # Will auto-resolve to assets/{TICKER}/cache.csv if exists
+    warmup_bars: int = 0  # Bars to pre-fetch before start date (0 = auto-calculate from grid)
 
 
 @dataclass
@@ -75,7 +76,7 @@ class OptimizationConfig:
     transfer_ratio_threshold: float = 0.6
     sensitivity_step: int = 2
     final_candidates: int = 3
-    min_trades_per_year: float = 1.5
+    min_trades_per_year: float = 2
 
 
 @dataclass
@@ -155,6 +156,261 @@ def _parse_grid_value(value):
     
     # Fallback: return as single-item list
     return [value]
+
+
+def calculate_warmup_from_grid(grid: Dict[str, Any], strategy_name: str = "") -> int:
+    """Auto-calculate required warmup bars from grid parameters.
+    
+    Analyzes the grid to find the maximum indicator period that requires
+    historical data for proper calculation.
+    
+    Args:
+        grid: Parameter grid dictionary (may contain range strings or lists)
+        strategy_name: Strategy name for strategy-specific logic
+        
+    Returns:
+        Maximum warmup bars needed (0 if cannot be determined)
+    """
+    if not grid:
+        return 0
+    
+    max_period = 0
+    
+    # EMA-based strategies: ema_slow is typically the longest
+    for key in ['ema_slow', 'ema_mid', 'ema_fast']:
+        if key in grid:
+            values = _parse_grid_value(grid[key])
+            if values:
+                max_period = max(max_period, max(values))
+    
+    # MACD: requires slowperiod + signalperiod for full indicator warmup
+    if 'slowperiod' in grid:
+        slow_values = _parse_grid_value(grid['slowperiod'])
+        if slow_values:
+            slow_max = max(slow_values)
+            signal_max = 0
+            if 'signalperiod' in grid:
+                signal_values = _parse_grid_value(grid['signalperiod'])
+                if signal_values:
+                    signal_max = max(signal_values)
+            max_period = max(max_period, slow_max + signal_max)
+    
+    # RSI period (for portfolio strategies)
+    if 'rsi_period' in grid:
+        rsi_values = _parse_grid_value(grid['rsi_period'])
+        if rsi_values:
+            max_period = max(max_period, max(rsi_values))
+    
+    return max_period
+
+
+def calculate_warmup_from_params(params: Dict[str, Any], strategy_name: str = "") -> int:
+    """Calculate warmup bars from strategy parameters (single backtest, no grid).
+    
+    Args:
+        params: Strategy parameter dictionary
+        strategy_name: Strategy name for strategy-specific logic
+        
+    Returns:
+        Maximum warmup bars needed
+    """
+    max_period = 0
+    
+    # EMA-based strategies
+    for key in ['ema_slow', 'ema_mid', 'ema_fast']:
+        if key in params:
+            max_period = max(max_period, int(params[key]))
+    
+    # MACD strategies
+    if 'slowperiod' in params:
+        slow = int(params['slowperiod'])
+        signal = int(params.get('signalperiod', 0))
+        max_period = max(max_period, slow + signal)
+    
+    # RSI
+    if 'rsi_period' in params:
+        max_period = max(max_period, int(params['rsi_period']))
+    
+    return max_period
+
+
+def extend_start_date(start: str, warmup_bars: int, interval: str = "1d") -> str:
+    """Extend start date backwards to accommodate warmup period.
+    
+    Args:
+        start: Original start date string (YYYY-MM-DD)
+        warmup_bars: Number of trading bars needed for warmup
+        interval: Data interval (used to calculate calendar days)
+        
+    Returns:
+        Extended start date string (YYYY-MM-DD)
+    """
+    import pandas as pd
+    
+    start_dt = pd.to_datetime(start)
+    
+    # Add buffer for weekends/holidays (1.5x for daily data)
+    if interval.lower() in ("1d", "d"):
+        calendar_days = int(warmup_bars * 1.5)
+    else:
+        calendar_days = warmup_bars
+    
+    extended_dt = start_dt - pd.Timedelta(days=calendar_days)
+    return extended_dt.strftime('%Y-%m-%d')
+
+
+# =============================================================================
+# Warmup Error Classes
+# =============================================================================
+
+class WarmupError(Exception):
+    """Base class for warmup-related errors."""
+    pass
+
+
+class DataDownloadError(WarmupError):
+    """Raised when data download fails (network, API, empty response)."""
+    def __init__(self, message: str, ticker: str = None):
+        self.ticker = ticker
+        super().__init__(message)
+
+
+class InsufficientWarmupDataError(WarmupError):
+    """Raised when not enough historical data exists for warmup period."""
+    def __init__(self, ticker: str, required: int, available: int, earliest_available: str = None):
+        self.ticker = ticker
+        self.required = required
+        self.available = available
+        self.shortfall = required - available
+        self.earliest_available = earliest_available
+        
+        msg = (
+            f"Insufficient warmup data for {ticker}: "
+            f"need {required} bars, have {available} (short by {self.shortfall})"
+        )
+        if earliest_available:
+            msg += f". Earliest available: {earliest_available}"
+        super().__init__(msg)
+
+
+class InsufficientBacktestDataError(WarmupError):
+    """Raised when warmup leaves too few bars for meaningful backtesting."""
+    def __init__(self, total: int, warmup: int, remaining: int, minimum: int):
+        self.total = total
+        self.warmup = warmup
+        self.remaining = remaining
+        self.minimum = minimum
+        super().__init__(
+            f"After {warmup} warmup bars, only {remaining} bars remain "
+            f"(minimum: {minimum}). Reduce indicator periods or extend data range."
+        )
+
+
+# =============================================================================
+# Warmup Validation Functions
+# =============================================================================
+
+def validate_warmup_coverage(
+    data_start: str,
+    required_warmup: int,
+    original_start: str,
+    ticker: str
+) -> Tuple[bool, str]:
+    """Validate that we have sufficient warmup data.
+    
+    Args:
+        data_start: Actual start date of data (YYYY-MM-DD)
+        required_warmup: Number of bars required for warmup
+        original_start: User's intended start date (YYYY-MM-DD)
+        ticker: Asset ticker for error messages
+        
+    Returns:
+        (is_valid, message) - True if valid, False with explanation if not
+    """
+    import pandas as pd
+    
+    data_start_dt = pd.to_datetime(data_start)
+    original_start_dt = pd.to_datetime(original_start)
+    
+    # Estimate available warmup days (rough estimate)
+    # Actual bar count will be validated in DataFetcher after loading
+    available_days = (original_start_dt - data_start_dt).days
+    # Approximate trading days (5/7 of calendar days)
+    estimated_bars = int(available_days * 5 / 7)
+    
+    if estimated_bars < required_warmup:
+        shortfall = required_warmup - estimated_bars
+        return False, (
+            f"Insufficient warmup data for {ticker}. "
+            f"Required: {required_warmup} bars, Available (est): {estimated_bars} bars. "
+            f"Shortfall: ~{shortfall} bars. "
+            f"Options: 1) Reduce max indicator period in grid, "
+            f"2) Use a later start date, "
+            f"3) Use --allow-partial-warmup flag to proceed with warning."
+        )
+    
+    return True, f"Warmup OK: ~{estimated_bars} bars available (required: {required_warmup})"
+
+
+def validate_sufficient_backtest_data(
+    total_bars: int,
+    warmup_bars: int,
+    min_backtest_bars: int = 252
+) -> Tuple[bool, str]:
+    """Ensure enough data remains after warmup for meaningful backtest.
+    
+    Args:
+        total_bars: Total number of bars in dataset
+        warmup_bars: Bars used for warmup
+        min_backtest_bars: Minimum bars required (default 252 = ~1 year)
+        
+    Returns:
+        (is_valid, message) - True if valid, False with explanation if not
+    """
+    remaining_bars = total_bars - warmup_bars
+    
+    if remaining_bars < min_backtest_bars:
+        return False, (
+            f"After {warmup_bars} warmup bars, only {remaining_bars} bars remain for backtesting. "
+            f"Minimum required: {min_backtest_bars} bars. "
+            f"Options: 1) Reduce max indicator period, 2) Extend data range, "
+            f"3) Use --min-backtest-bars to override."
+        )
+    
+    return True, f"Backtest data OK: {remaining_bars} bars after warmup"
+
+
+def print_warmup_analysis(
+    ticker: str,
+    required_warmup: int,
+    max_indicator: str,
+    original_start: str,
+    extended_start: str,
+    available_warmup: int,
+    backtest_bars: int
+) -> None:
+    """Print warmup analysis summary to console.
+    
+    Args:
+        ticker: Asset ticker
+        required_warmup: Bars required for warmup
+        max_indicator: Name of indicator requiring most warmup (e.g., "ema_slow=250")
+        original_start: User's intended start date
+        extended_start: Extended start date for data fetch
+        available_warmup: Actual bars available for warmup
+        backtest_bars: Bars remaining for backtesting
+    """
+    warmup_ok = available_warmup >= required_warmup
+    backtest_ok = backtest_bars >= 252
+    
+    warmup_status = "[OK]" if warmup_ok else "[X]"
+    backtest_status = "[OK]" if backtest_ok else "[X]"
+    
+    print(f"\nWarmup Analysis for {ticker}:")
+    print(f"  Required warmup: {required_warmup} bars (max indicator: {max_indicator})")
+    print(f"  Extended start: {extended_start} (original: {original_start})")
+    print(f"  Available warmup: {available_warmup} bars {warmup_status}")
+    print(f"  Backtest data: {backtest_bars} bars {backtest_status}")
 
 
 def load_config(path: Path) -> WorkflowConfig:

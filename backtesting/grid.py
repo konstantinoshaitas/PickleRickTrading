@@ -97,12 +97,80 @@ def _run_single_backtest_worker(args: Tuple) -> Optional[Dict]:
         return None
 
 
+def _run_single_backtest_worker_with_warmup(args: Tuple) -> Optional[Dict]:
+    """Worker function for multiprocessing with warmup support.
+    
+    Args:
+        args: Tuple containing:
+            - combo: Parameter combination tuple
+            - keys: Parameter names list
+            - base_params: Base parameters dict
+            - close_values: Close price values (numpy array) - includes warmup
+            - close_index: Close price index (DatetimeIndex values)
+            - eval_close_values: Eval close values (numpy array) - trimmed, no warmup
+            - eval_close_index: Eval close index (DatetimeIndex values)
+            - engine_config: BacktestConfig dict
+            - strategy_cls_name: Strategy class name string
+            - freq: Frequency string
+            - warmup_bars: Number of warmup bars
+    
+    Returns:
+        Metrics dict if valid and successful, None if invalid/failed
+    """
+    (combo, keys, base_params, close_values, close_index, 
+     eval_close_values, eval_close_index,
+     engine_config, strategy_cls_name, freq, warmup_bars) = args
+    
+    # Reconstruct objects (needed for multiprocessing pickling)
+    close = pd.Series(close_values, index=pd.DatetimeIndex(close_index))
+    eval_close = pd.Series(eval_close_values, index=pd.DatetimeIndex(eval_close_index))
+    engine = BacktestEngine(BacktestConfig(**engine_config))
+    strategy_cls = StrategyFactory[strategy_cls_name]
+    
+    # Build params
+    params = dict(base_params)
+    params.update(dict(zip(keys, combo)))
+    
+    # Validate
+    if not _validate_params_static(params):
+        return None
+    
+    # Run backtest
+    try:
+        strat = strategy_cls(**params)
+        # Generate signals on full data (including warmup)
+        entries, exits = strat.generate_signals(close)
+        
+        # Trim signals to match eval_close if using warmup
+        if warmup_bars > 0:
+            eval_start = eval_close.index[0]
+            eval_end = eval_close.index[-1]
+            entries = entries.loc[eval_start:eval_end]
+            exits = exits.loc[eval_start:eval_end]
+        
+        # Run backtest on eval_close (trimmed data)
+        portfolio = engine.run(eval_close, (entries, exits))
+        metrics = compute_metrics(portfolio, eval_close, freq)
+        metrics.update(params)
+        return metrics
+    except Exception:
+        # Skip failed backtests
+        return None
+
+
 class GridSearch:
-    def __init__(self, engine: BacktestEngine, strategy_cls, n_jobs: Optional[int] = None):
+    def __init__(
+        self, 
+        engine: BacktestEngine, 
+        strategy_cls, 
+        n_jobs: Optional[int] = None,
+        warmup_bars: int = 0,
+    ):
         self.engine = engine
         self.strategy_cls = strategy_cls
         self.results: List[Dict] = []
         self.n_jobs = n_jobs or max(1, mp.cpu_count() - 1)  # Leave 1 core free
+        self.warmup_bars = warmup_bars
         
         # Get strategy name from StrategyFactory (reverse lookup)
         self.strategy_name = next(
@@ -115,17 +183,23 @@ class GridSearch:
         close: pd.Series, 
         grid: Dict[str, List[int]], 
         base_params: Dict[str, int],
-        use_multiprocessing: bool = True
+        use_multiprocessing: bool = True,
+        backtest_close: Optional[pd.Series] = None,
     ):
         """Run optimized grid search with optional multiprocessing and pre-filtering.
         
         Args:
-            close: Price series
+            close: Price series (including warmup period for indicator calculation)
             grid: Parameter grid dictionary
             base_params: Base parameters
             use_multiprocessing: Enable multiprocessing (default: True)
+            backtest_close: Price series for backtest evaluation (trimmed, no warmup).
+                           If None, uses close for both indicator calc and backtest.
         """
         keys = list(grid.keys())
+        
+        # Use backtest_close for portfolio evaluation if provided (warmup trimming)
+        eval_close = backtest_close if backtest_close is not None else close
         
         # Calculate total combinations for progress tracking
         total_possible = int(np.prod([len(grid[k]) for k in keys]))
@@ -139,11 +213,14 @@ class GridSearch:
         total_valid = len(valid_combos)
         print(f"Found {total_valid:,} valid combinations (from {total_possible:,} total)")
         
+        if self.warmup_bars > 0:
+            print(f"Using warmup: {self.warmup_bars} bars (signals will be trimmed before backtest)")
+        
         # Route to multiprocessing or sequential based on flag and size
         if use_multiprocessing and total_valid > 100:
-            self._run_multiprocessing(valid_combos, keys, base_params, close, total_valid)
+            self._run_multiprocessing(valid_combos, keys, base_params, close, eval_close, total_valid)
         else:
-            self._run_sequential(valid_combos, keys, base_params, close, total_valid)
+            self._run_sequential(valid_combos, keys, base_params, close, eval_close, total_valid)
         
         return self.results
     
@@ -152,7 +229,8 @@ class GridSearch:
         valid_combos: List[Tuple], 
         keys: List[str], 
         base_params: Dict[str, int],
-        close: pd.Series, 
+        close: pd.Series,
+        eval_close: pd.Series,
         total_valid: int
     ):
         """Run grid search using multiprocessing."""
@@ -161,6 +239,8 @@ class GridSearch:
         # Prepare picklable arguments
         close_values = close.values
         close_index = close.index.values
+        eval_close_values = eval_close.values
+        eval_close_index = eval_close.index.values
         engine_config = {
             'init_cash': self.engine.config.init_cash,
             'fees': self.engine.config.fees,
@@ -179,7 +259,9 @@ class GridSearch:
             (
                 combo, keys, base_params,
                 close_values, close_index,
-                engine_config, strategy_cls_name, freq
+                eval_close_values, eval_close_index,
+                engine_config, strategy_cls_name, freq,
+                self.warmup_bars
             )
             for combo in valid_combos
         ]
@@ -191,7 +273,7 @@ class GridSearch:
         with mp.Pool(processes=self.n_jobs) as pool:
             for i in range(0, len(args_list), chunk_size):
                 chunk = args_list[i:i + chunk_size]
-                results_chunk = pool.map(_run_single_backtest_worker, chunk)
+                results_chunk = pool.map(_run_single_backtest_worker_with_warmup, chunk)
                 
                 # Filter out None results (invalid/failed)
                 valid_results = [r for r in results_chunk if r is not None]
@@ -206,7 +288,8 @@ class GridSearch:
         valid_combos: List[Tuple], 
         keys: List[str], 
         base_params: Dict[str, int],
-        close: pd.Series, 
+        close: pd.Series,
+        eval_close: pd.Series,
         total_valid: int
     ):
         """Run grid search sequentially (fallback)."""
@@ -218,9 +301,19 @@ class GridSearch:
                 continue
             
             strat = self.strategy_cls(**params)
+            # Generate signals on full data (including warmup)
             entries, exits = strat.generate_signals(close)
-            portfolio = self.engine.run(close, (entries, exits))
-            metrics = compute_metrics(portfolio, close, self.engine.config.freq)
+            
+            # Trim signals to match eval_close if using warmup
+            if self.warmup_bars > 0 and eval_close is not close:
+                eval_start = eval_close.index[0]
+                eval_end = eval_close.index[-1]
+                entries = entries.loc[eval_start:eval_end]
+                exits = exits.loc[eval_start:eval_end]
+            
+            # Run backtest on eval_close (trimmed data)
+            portfolio = self.engine.run(eval_close, (entries, exits))
+            metrics = compute_metrics(portfolio, eval_close, self.engine.config.freq)
             metrics.update(params)
             self.results.append(metrics)
             
@@ -333,6 +426,110 @@ def _run_vectorized_batch_worker(args: Tuple) -> Optional[pd.DataFrame]:
         
     except Exception as e:
         print(f"Batch worker error: {e}")
+        return None
+
+
+def _run_vectorized_batch_worker_with_warmup(args: Tuple) -> Optional[pd.DataFrame]:
+    """Worker function for multiprocessing with warmup support.
+    
+    Args:
+        args: Tuple containing:
+            - batch_params: List of parameter tuples for this batch
+            - keys: Parameter names list
+            - close_values: Close price values (numpy array) - includes warmup
+            - close_index: Close price index (DatetimeIndex values)
+            - eval_close_values: Eval close values (numpy array) - trimmed, no warmup
+            - eval_close_index: Eval close index (DatetimeIndex values)
+            - engine_config: BacktestConfig dict
+            - strategy_name: Strategy name string
+            - freq: Frequency string
+            - min_trades_per_year: Minimum trades per year filter
+            - warmup_bars: Number of warmup bars
+    
+    Returns:
+        DataFrame with metrics for valid parameter combinations, or None if failed
+    """
+    (batch_params, keys, close_values, close_index, 
+     eval_close_values, eval_close_index,
+     engine_config, strategy_name, freq, 
+     min_trades_per_year, warmup_bars) = args
+    
+    try:
+        # Reconstruct close Series (for indicator calculation)
+        close = pd.Series(close_values, index=pd.DatetimeIndex(close_index))
+        eval_close = pd.Series(eval_close_values, index=pd.DatetimeIndex(eval_close_index))
+        batch_size = len(batch_params)
+        
+        # Unzip parameters
+        param_lists = list(zip(*batch_params))
+        param_dict = dict(zip(keys, param_lists))
+        
+        # Standardize column names
+        common_cols = pd.Index(range(batch_size), name='combo_id')
+        
+        # Compute indicators based on strategy type (on full data including warmup)
+        if strategy_name in ("triple_ema", "triple_ema_unconstrained"):
+            entries, exits = _compute_ema_signals_batch(
+                close, 
+                list(param_dict['ema_fast']),
+                list(param_dict['ema_mid']),
+                list(param_dict['ema_slow']),
+                common_cols
+            )
+        elif strategy_name == "macd":
+            entries, exits = _compute_macd_signals_batch(
+                close,
+                list(param_dict['fastperiod']),
+                list(param_dict['slowperiod']),
+                list(param_dict['signalperiod']),
+                common_cols
+            )
+        elif strategy_name in ("ensemble", "ensemble_unconstrained"):
+            entries, exits = _compute_ensemble_signals_batch(
+                close,
+                list(param_dict['ema_fast']),
+                list(param_dict['ema_mid']),
+                list(param_dict['ema_slow']),
+                list(param_dict['fastperiod']),
+                list(param_dict['slowperiod']),
+                list(param_dict['signalperiod']),
+                common_cols
+            )
+        else:
+            return None
+        
+        # Trim signals to eval_close date range if using warmup
+        if warmup_bars > 0:
+            eval_start = eval_close.index[0]
+            eval_end = eval_close.index[-1]
+            entries = entries.loc[eval_start:eval_end]
+            exits = exits.loc[eval_start:eval_end]
+        
+        # Run batch backtest on eval_close (trimmed, no warmup)
+        pf = vbt.Portfolio.from_signals(
+            close=eval_close,
+            entries=entries,
+            exits=exits,
+            init_cash=engine_config['init_cash'],
+            fees=engine_config['fees'],
+            slippage=engine_config['slippage'],
+            freq=freq
+        )
+        
+        # Build parameter DataFrame
+        param_df = pd.DataFrame({k: list(v) for k, v in param_dict.items()})
+        
+        # Compute batch metrics
+        result_df = compute_batch_metrics(pf, eval_close, freq, param_df)
+        
+        # Filter by minimum trades per year
+        if min_trades_per_year > 0:
+            result_df = result_df[result_df['trades_per_year'] >= min_trades_per_year]
+        
+        return result_df
+        
+    except Exception as e:
+        print(f"Batch worker with warmup error: {e}")
         return None
 
 
@@ -703,6 +900,7 @@ class VectorizedGridSearch:
         batch_size: Number of parameter combinations per batch (default: 5000)
         n_jobs: Number of CPU cores for multiprocessing (default: all - 1)
         min_trades_per_year: Filter out strategies with fewer trades (default: 0.5)
+        warmup_bars: Number of warmup bars for indicator calculation (default: 0)
     """
     
     SUPPORTED_STRATEGIES = [
@@ -719,7 +917,8 @@ class VectorizedGridSearch:
         strategy_name: str,
         batch_size: int = 5000,
         n_jobs: Optional[int] = None,
-        min_trades_per_year: float = 0.5
+        min_trades_per_year: float = 0.5,
+        warmup_bars: int = 0,
     ):
         if strategy_name not in self.SUPPORTED_STRATEGIES:
             raise ValueError(
@@ -732,6 +931,7 @@ class VectorizedGridSearch:
         self.batch_size = batch_size
         self.n_jobs = n_jobs or max(1, mp.cpu_count() - 1)
         self.min_trades_per_year = min_trades_per_year
+        self.warmup_bars = warmup_bars
         self.results: List[Dict] = []
     
     def run(
@@ -739,20 +939,26 @@ class VectorizedGridSearch:
         close: pd.Series,
         grid: Dict[str, List[int]],
         base_params: Dict[str, int],
-        use_multiprocessing: bool = True
+        use_multiprocessing: bool = True,
+        backtest_close: Optional[pd.Series] = None,
     ) -> List[Dict]:
         """Run vectorized grid search.
         
         Args:
-            close: Price series
+            close: Price series (including warmup period for indicator calculation)
             grid: Parameter grid dictionary
             base_params: Base parameters (merged with grid params)
             use_multiprocessing: Use multiprocessing for batch distribution
+            backtest_close: Price series for backtest evaluation (trimmed, no warmup).
+                           If None, uses close for both indicator calc and backtest.
             
         Returns:
             List of metric dictionaries for each valid parameter combination
         """
         keys = list(grid.keys())
+        
+        # Use backtest_close for portfolio evaluation if provided (warmup trimming)
+        eval_close = backtest_close if backtest_close is not None else close
         
         # Calculate total combinations
         total_possible = int(np.prod([len(grid[k]) for k in keys]))
@@ -769,6 +975,9 @@ class VectorizedGridSearch:
         if total_valid == 0:
             print("No valid combinations to test.")
             return []
+        
+        if self.warmup_bars > 0:
+            print(f"Using warmup: {self.warmup_bars} bars (signals will be trimmed before backtest)")
         
         # Split into batches
         num_batches = (total_valid + self.batch_size - 1) // self.batch_size
@@ -790,11 +999,11 @@ class VectorizedGridSearch:
         
         if use_multiprocessing and num_batches > 1 and self.n_jobs > 1:
             self._run_multiprocessing(
-                batches, keys, close, engine_config, num_batches
+                batches, keys, close, eval_close, engine_config, num_batches
             )
         else:
             self._run_sequential(
-                batches, keys, close, engine_config, num_batches
+                batches, keys, close, eval_close, engine_config, num_batches
             )
         
         print(f"\nCompleted: {len(self.results):,} valid strategies found")
@@ -805,6 +1014,7 @@ class VectorizedGridSearch:
         batches: List[List[Tuple]],
         keys: List[str],
         close: pd.Series,
+        eval_close: pd.Series,
         engine_config: Dict,
         num_batches: int
     ):
@@ -821,7 +1031,7 @@ class VectorizedGridSearch:
                 # Standardize column names
                 common_cols = pd.Index(range(batch_size), name='combo_id')
                 
-                # Compute signals based on strategy
+                # Compute signals based on strategy (on full data including warmup)
                 # Note: unconstrained strategies use the same signal logic, just without param ordering
                 if self.strategy_name in ("triple_ema", "triple_ema_unconstrained"):
                     entries, exits = _compute_ema_signals_batch(
@@ -851,9 +1061,19 @@ class VectorizedGridSearch:
                         common_cols
                     )
                 
+                # Trim signals to eval_close date range if using warmup
+                if self.warmup_bars > 0 and eval_close is not close:
+                    eval_start = eval_close.index[0]
+                    eval_end = eval_close.index[-1]
+                    entries = entries.loc[eval_start:eval_end]
+                    exits = exits.loc[eval_start:eval_end]
+                
+                # Use eval_close for backtest (trimmed, no warmup)
+                backtest_close = eval_close
+                
                 # Run batch backtest
                 pf = vbt.Portfolio.from_signals(
-                    close=close,
+                    close=backtest_close,
                     entries=entries,
                     exits=exits,
                     init_cash=engine_config['init_cash'],
@@ -866,7 +1086,7 @@ class VectorizedGridSearch:
                 param_df = pd.DataFrame({k: list(v) for k, v in param_dict.items()})
                 
                 # Compute batch metrics
-                result_df = compute_batch_metrics(pf, close, engine_config['freq'], param_df)
+                result_df = compute_batch_metrics(pf, backtest_close, engine_config['freq'], param_df)
                 
                 # Filter by minimum trades per year
                 if self.min_trades_per_year > 0:
@@ -890,6 +1110,7 @@ class VectorizedGridSearch:
         batches: List[List[Tuple]],
         keys: List[str],
         close: pd.Series,
+        eval_close: pd.Series,
         engine_config: Dict,
         num_batches: int
     ):
@@ -899,19 +1120,22 @@ class VectorizedGridSearch:
         # Prepare serializable arguments for each batch
         close_values = close.values
         close_index = close.index.values
+        eval_close_values = eval_close.values
+        eval_close_index = eval_close.index.values
         
         args_list = [
             (
                 batch_params, keys, close_values, close_index,
+                eval_close_values, eval_close_index,
                 engine_config, self.strategy_name, engine_config['freq'],
-                self.min_trades_per_year
+                self.min_trades_per_year, self.warmup_bars
             )
             for batch_params in batches
         ]
         
         completed = 0
         with mp.Pool(processes=self.n_jobs) as pool:
-            for result_df in pool.imap_unordered(_run_vectorized_batch_worker, args_list):
+            for result_df in pool.imap_unordered(_run_vectorized_batch_worker_with_warmup, args_list):
                 completed += 1
                 if result_df is not None and len(result_df) > 0:
                     self.results.extend(result_df.to_dict('records'))
