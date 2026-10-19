@@ -1,0 +1,17 @@
+# Dates omitted: resolve last three COMPLETED calendar months at execution.
+pairs: [EURUSD, AUDUSD, NZDUSD, EURAUD, EURNZD, AUDNZD]
+providers: [Broadway, ICMLD]
+stage: baseline
+latency_ms: 100
+stale_ms: 2000
+persistence_ms: 1000
+quantity: 1000
+cash: 100000
+commission_bps: null  # Unknown, not an assertion of zero fees.
+financing_quote: null
+slippage_bps: 0
+exit_wait_s: 30
+max_hold_s: 7200
+roll_buffer_days: 2
+min_basis_samples: 5
+allow_calendar_fallback: false

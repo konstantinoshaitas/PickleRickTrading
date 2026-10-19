@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pickle-fx-cme-research"
+version = "0.1.0"
+requires-python = ">=3.11,<3.14"
+description = "Offline-first, zero-cost-gated FX/CME research using vectorbt"
+dependencies = [
+  "vectorbt==0.28.1", "numpy==2.3.4", "pandas==2.3.3", "pyarrow>=14",
+  "matplotlib==3.10.7", "PyYAML==6.0.2", "plotly>=5,<6",
+  "tir-tools @ git+https://github.com/ICMarkets/TIR_Tools.git@d77ea849b450b5a2ab8c940694d6a82affe5e1b9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9", "ruff>=0.12,<1"]
+
+[tool.setuptools.packages.find]
+include = ["research*"]
+
+[tool.setuptools.package-data]
+"research.fx_cme_divergence" = ["configs/*.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["research/fx_cme_divergence/tests"]
+
+[tool.ruff]
+line-length = 110
