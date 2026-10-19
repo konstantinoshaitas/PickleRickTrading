@@ -21,6 +21,10 @@ data/*.csv
 data/*.parquet
 !data/.gitkeep
 
+# Private research inputs and all generated artifacts (never push)
+research/fx_cme_divergence/data/
+research/fx_cme_divergence/outputs/
+
 # Results files (large parquet files)
 *.parquet
 assets/**/results/*.parquet
