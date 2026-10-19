@@ -134,8 +134,11 @@ def clickhouse(creds_file):
     return ClickHouseClient.from_settings(settings)
 
 
-def broker_export(connection, start, end, pairs, providers, output, row_limit=200000):
-    """One-hour chunks with partition pruning. Refuse saturated chunks, never truncate silently."""
+def broker_export(connection, start, end, pairs, providers, output, row_limit=200000, windows=None):
+    """One-hour chunks with partition pruning. Refuse saturated chunks, never truncate silently.
+
+    `windows` ([[lo_ns, hi_ns], ...], e.g. from session_windows) restricts the export to the session quote
+    windows instead of every hour of [start, end)."""
     from .storage import seal
     a, b = ns(start), ns(end)
     if not (0 < b-a <= 100*86400*NS) or not (1 <= row_limit <= 1000000):
@@ -154,12 +157,16 @@ def broker_export(connection, start, end, pairs, providers, output, row_limit=20
         raise ValueError("provider tables not discovered")
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    files = []
+    files, empty = [], 0
     settings = {"max_execution_time": 30, "max_threads": 2, "max_rows_to_read": 10000000,
                 "max_result_rows": row_limit, "result_overflow_mode": "throw"}
+    spans = [(max(a, lo), min(b, hi)) for lo, hi in (windows or [(a, b)]) if max(a, lo) < min(b, hi)]
+    chunks = [(hour, max(wa, hour*3600*NS), min(wb, (hour+1)*3600*NS)) for wa, wb in spans
+              for hour in range(wa // (3600*NS), (wb-1)//(3600*NS)+1)]
+    if not chunks or len({hour for hour, _, _ in chunks}) != len(chunks):
+        raise ValueError("broker windows are empty or share an hour chunk")
     for lp in providers:
-        for hour in range(a // (3600*NS), (b-1)//(3600*NS)+1):
-            lo, hi = max(a, hour*3600*NS), min(b, (hour+1)*3600*NS)
+        for hour, lo, hi in chunks:
             # tir loader is bounded/readonly, but omits size; use its table/parameters with enriched SQL.
             from tir_data.sources.lp_quotes import quote_parameters
             params = quote_parameters(lp, mapping.symbol_id, lo, hi)
@@ -169,9 +176,13 @@ def broker_export(connection, start, end, pairs, providers, output, row_limit=20
             frame = connection.query_df(sql + f" LIMIT {row_limit + 1}", params, settings=settings)
             if len(frame) >= row_limit:
                 raise ValueError("broker chunk at row cap; narrow request, do not use partial export")
+            if frame.empty:  # closed market (weekend, maintenance): no columns come back, nothing to keep
+                empty += 1
+                continue
             name = f"{lp}_{hour}.csv"
             frame.merge(mapping, left_on="core_symbol", right_on="symbol_id").to_csv(output/name, index=False)
             files.append(name)
     seal(output, files, {"source": "read-only ClickHouse LP top of book", "synthetic": False,
-                         "start_ns": a, "end_ns": b, "pairs": list(pairs), "providers": list(providers)})
+                         "start_ns": a, "end_ns": b, "pairs": list(pairs), "providers": list(providers),
+                         "empty_chunks": empty})
     return len(files)

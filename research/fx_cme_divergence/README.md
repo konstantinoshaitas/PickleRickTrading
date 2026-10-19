@@ -59,7 +59,8 @@ $M estimate --env-file ~/.config/tir-data/databento.env --calendar cal.csv \
     --request-start 2026-06-29T00:00:00Z --request-end 2026-10-01T00:00:00Z
 $M fetch    --env-file ~/.config/tir-data/databento.env --calendar cal.csv \
     --request-start 2026-06-29T00:00:00Z --request-end 2026-10-01T00:00:00Z
-$M broker-fetch --creds-file ~/.config/ch-axi/creds.toml --providers Broadway
+$M broker-fetch --creds-file ~/.config/ch-axi/creds.toml --providers Broadway,ICMLD --calendar cal.csv \
+    --start <window start minus 2 days>   # session windows only; reaches the Friday basis of a first Sunday
 $M normalize --downloads outputs/audits/downloads.json --broker-chunks data/raw/broker \
     --calendar cal.csv --contract-terms terms.csv --broker-size-units sizes.json
 $M audit && $M prepare && $M backtest --stage baseline && $M report --stage baseline
@@ -120,9 +121,11 @@ ask for losses); an unpriced conversion marks the row. Unknown commission/financ
 * Real run needs two small hand-authored official inputs: the session calendar CSV (columns of `sessions.csv`,
   from <https://www.cmegroup.com/trading-hours.html> and its holiday schedule) and contract terms
   (`root,raw_symbol,last_trade_ns,tenor,calendar_source`). The tool refuses unsourced ones.
-* Status action codes used for close (`CLOSE`/`PAUSE`), pre-open (`PRE_OPEN`) and reopen (`TRADING`) are unverified
-  on real data; ambiguous transitions leave a session unverified. Inspect the audit before trusting a session.
-* Broker `size` units are unverified; `--broker-size-units` (JSON `{"EURUSD": 1, …}`) is mandatory, not guessed.
+* Status action codes (`CLOSE`=12, `PRE_OPEN`=1, `TRADING`=7) matched the official schedule to the second on every
+  session-product of a 30-day real sample (2026-09-19..10-19); `PAUSE` never occurred. Ambiguous transitions still leave
+  a session unverified: inspect the audit before trusting a session.
+* Broker `size` is a constant 100000.00 on every LP row of that sample (a nominal, not depth), read as base-currency
+  units (`{"EURUSD": 1, …}`); `--broker-size-units` stays mandatory, not guessed.
 * LP data are not Capital.com/Exness customer quotes; Broadway is the intended provider, ICMLD provisional.
 * ~13 Sundays per quarter: pilot only, correlated crosses/providers, no robust-alpha claim.
 * Depth (MBP-10) is not implemented; top-of-book only.

@@ -16,8 +16,11 @@ def broker_snapshots(frame, provider, contract_sizes):
     for pair, rows in frame.groupby("symbol_name"):
         if pair not in contract_sizes or contract_sizes[pair] <= 0:
             raise ValueError("explicit broker size-unit multiplier required for each pair")
-        if rows.duplicated(["side", "time_received"]).any():
-            raise ValueError("same-timestamp broker side updates need provider sequence; refusing ambiguity")
+        # Several prices for one side at one timestamp carry no provider sequence, so their order is unknowable:
+        # keep one row but flag it, which makes the quote invalid until the next unambiguous update.
+        ambiguous = rows.duplicated(["side", "time_received"], keep=False)
+        rows = rows.assign(indicative_flags=rows.indicative_flags.where(~ambiguous, 1))
+        rows = rows.drop_duplicates(["side", "time_received"], keep="first")
         times = pd.DataFrame({"recv_ns": sorted(rows.time_received.unique())})
         sides = []
         for side, label in ((0, "bid"), (1, "ask")):
@@ -38,6 +41,14 @@ def broker_snapshots(frame, provider, contract_sizes):
             snap[f"{label}_recv_ns"] = snap[f"{label}_recv_ns"].fillna(0).astype("int64")
         pieces.append(snap)
     return pd.concat(pieces, ignore_index=True) if pieces else pd.DataFrame()
+
+
+def exact_ns(frame, columns=("recv_ns", "event_ns", "known_ns", "expiry_ns")):
+    """DBN timestamps are uint64; concatenated with int64 broker times pandas would silently go to float64."""
+    frame = frame.copy()
+    for column in set(columns) & set(frame):
+        frame[column] = frame[column].astype("int64")
+    return frame
 
 
 def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path, output):
@@ -63,6 +74,7 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     if definitions.empty:
         raise ValueError("no downloaded definitions match official contract terms")
     definitions = definitions.rename(columns={"ts_recv": "known_ns", "expiration": "expiry_ns"})
+    definitions = exact_ns(definitions)
     definitions = definitions[["root", "raw_symbol", "instrument_id", "known_ns", "expiry_ns",
                                "last_trade_ns", "tenor"]].drop_duplicates()
     ids = definitions.sort_values("known_ns").drop_duplicates("instrument_id").set_index("instrument_id")
@@ -71,6 +83,7 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     book["root"] = book.instrument_id.map(ids.root)
     book = book.rename(columns={"ts_recv": "recv_ns", "ts_event": "event_ns", "bid_px_00": "bid",
                                 "ask_px_00": "ask", "bid_sz_00": "bid_size", "ask_sz_00": "ask_size"})
+    book = exact_ns(book)
     for key in ("bid", "ask"):
         book[key] = book[key].map(lambda v: float(v) if v is not None else np.nan)
         book.loc[book[key].abs() > 1e6, key] = np.nan  # DBN undefined-price sentinel, never a real FX price.
@@ -78,12 +91,13 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
         book[f"{key}_recv_ns"] = book.recv_ns
     book["venue"], book["provider"], book["pair"] = "cme", "CME", ""
     book["indicative_flags"], book["disabled_flags"] = 0, 0
-    # MBP-1 updates may share timestamps; keep only if all book fields agree, otherwise require sequence.
-    book = book.drop_duplicates(["instrument_id", "recv_ns", "bid", "ask", "bid_size", "ask_size"])
-    if book.duplicated(["instrument_id", "recv_ns"]).any():
-        raise ValueError("CME timestamp has multiple book states; sequence-aware input required")
+    # One MDP3 packet carries several book events sharing ts_recv and sequence; the book known at ts_recv is the
+    # state after the LAST of them in feed order. Different packets at one ts_recv are genuinely ambiguous.
+    if (book.groupby(["instrument_id", "recv_ns"]).sequence.nunique() > 1).any():
+        raise ValueError("CME timestamp spans several packets; sequence-aware input required")
+    book = book.drop_duplicates(["instrument_id", "recv_ns"], keep="last")
     trades = frames["trades"].rename(columns={"ts_recv": "recv_ns", "ts_event": "event_ns"})
-    trades = trades[trades.instrument_id.isin(ids.index)].copy()
+    trades = exact_ns(trades[trades.instrument_id.isin(ids.index)].copy())
     trades["price"] = trades.price.astype(float)
     volumes = []
     # Complete Chicago 17:00 -> next weekday 16:00 sessions only, never current-day volume.
@@ -101,7 +115,7 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
         volumes.append({"root": ids.loc[iid].root, "instrument_id": iid, "session_end_ns": ending,
                         "available_ns": max(ending+NS, int(group.recv_ns.max())) if len(group) else ending+NS,
                         "volume": float(group["size"].sum())})
-    statuses = frames["status"]
+    statuses = exact_ns(frames["status"], ("ts_event", "ts_recv"))
     import databento as db
     observed = []
     for row in sessions.itertuples(index=False):
@@ -142,6 +156,9 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     for name, table in tables.items():
+        for column in table:
+            if column.endswith("_ns") and len(table) and not pd.api.types.is_integer_dtype(table[column]):
+                raise ValueError(f"{name}.{column} lost integer nanosecond precision")
         table.to_csv(output/f"{name}.csv", index=False)
     seal(output, [f"{t}.csv" for t in TABLES], {
         "synthetic": False, "source": "zero-cost Databento and authorized bounded ClickHouse",

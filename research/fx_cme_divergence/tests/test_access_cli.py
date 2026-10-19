@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from .. import __main__ as cli
@@ -233,3 +234,40 @@ def test_session_windows_reject_empty_calendar(tmp_path):
     make_bundle(tmp_path, config)
     with pytest.raises(ValueError, match="no sessions"):
         providers.session_windows(tmp_path / "sessions.csv", "2025-01-01T00:00:00Z", "2025-02-01T00:00:00Z")
+
+
+class Connection:
+    """Read-only ClickHouse stand-in: records the hour bounds of every quote query."""
+
+    def __init__(self, rows=0, empty_after=None):
+        self.rows, self.empty_after, self.spans = rows, empty_after, []
+
+    def query_df(self, sql, params=None, settings=None):
+        if "ICMarkets_Risk.symbols" in sql:
+            return pd.DataFrame({"symbol_id": [7], "symbol_name": ["EURUSD"]})
+        if "system.tables" in sql:
+            return pd.DataFrame({"name": ["quotes_Broadway"]})
+        self.spans.append((params["start_ns"], params["end_ns"]))
+        if self.empty_after is not None and params["start_ns"] >= self.empty_after:
+            return pd.DataFrame()  # ClickHouse returns no columns at all when nothing matches
+        return pd.DataFrame({"core_symbol": [7] * self.rows, "price": [1.0] * self.rows})
+
+
+def test_broker_export_windows_limit_hourly_chunks(tmp_path):
+    hour = 3600 * 10**9
+    base = 1_790_000_000 // 3600 * 3600 * 10**9
+    stamp = lambda n: str(pd.Timestamp(n, unit="ns", tz="UTC"))
+    connection = Connection(rows=2, empty_after=base + 6 * hour)
+    windows = [(base + 5 * hour + hour // 2, base + 7 * hour), (base + 40 * hour, base + 40 * hour + hour // 4)]
+    count = providers.broker_export(connection, stamp(base), stamp(base + 48 * hour), ("EURUSD",), ("Broadway",),
+                                    tmp_path, windows=windows)
+    assert count == 1 and len(connection.spans) == 3  # 3 of 48 hours queried; 2 returned nothing and are skipped
+    assert verify(tmp_path)["provenance"]["empty_chunks"] == 2
+    assert connection.spans == [(base + 5 * hour + hour // 2, base + 6 * hour), (base + 6 * hour, base + 7 * hour),
+                                (base + 40 * hour, base + 40 * hour + hour // 4)]
+    with pytest.raises(ValueError, match="empty"):
+        providers.broker_export(connection, stamp(base), stamp(base + 4 * hour), ("EURUSD",), ("Broadway",),
+                                tmp_path, windows=windows)
+    with pytest.raises(ValueError, match="row cap"):
+        providers.broker_export(Connection(rows=5), stamp(base), stamp(base + hour), ("EURUSD",), ("Broadway",),
+                                tmp_path, row_limit=5)

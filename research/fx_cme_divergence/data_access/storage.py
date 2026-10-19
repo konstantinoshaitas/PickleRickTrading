@@ -53,7 +53,10 @@ def verify(directory, required=()):
 
 def read_bundle(directory):
     manifest = verify(directory, [f"{t}.csv" for t in TABLES])
-    tables = {t: pd.read_csv(Path(directory) / f"{t}.csv", keep_default_na=False) for t in TABLES}
+    # Blank means NaN only for the numeric book columns; text columns (pair, provider) keep "" as a value.
+    missing = {c: [""] for c in ("bid", "ask", "bid_size", "ask_size")}
+    tables = {t: pd.read_csv(Path(directory) / f"{t}.csv", keep_default_na=False, na_values=missing,
+                             low_memory=False) for t in TABLES}
     # Never let timestamps pass through float64 (nanoseconds exceed its exact integer range).
     for table in tables.values():
         for column in table:
