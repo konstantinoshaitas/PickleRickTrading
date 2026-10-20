@@ -63,6 +63,9 @@ def parser():
             sub.add_argument("--creds-file", type=Path, required=True,
                              help="explicit ~/.config/ch-axi/creds.toml; [prod] reused securely")
             sub.add_argument("--row-limit", type=int, default=200000, help="per hourly chunk; saturation refuses")
+            sub.add_argument("--calendar", type=Path, help="official-calendar sessions CSV; exports only its "
+                             "basis->boundary windows instead of every hour of [start, end); --start must reach the "
+                             "Friday basis of a first-Sunday session")
         if command == "normalize":
             for name in ("downloads", "broker-chunks", "calendar", "contract-terms", "broker-size-units"):
                 sub.add_argument("--"+name, type=Path, required=True)
@@ -130,13 +133,14 @@ def run(args, config):
         except Exception:  # noqa: BLE001 - provider errors can echo credentials
             raise ValueError("data access failed; verify pinned install, explicit credential file and entitlement; no secrets logged") from None
     elif command == "broker-fetch":
-        from .data_access.providers import broker_export, clickhouse
+        from .data_access.providers import broker_export, clickhouse, session_windows
         if not 1 <= args.row_limit <= 1000000:
             raise UsageError("--row-limit must be 1..1000000")
+        start, end = config.start+"T00:00:00Z", config.end+"T00:00:00Z"
+        windows = session_windows(args.calendar, start, end) if args.calendar else None
         try:
-            count = broker_export(clickhouse(args.creds_file), config.start+"T00:00:00Z",
-                                  config.end+"T00:00:00Z", config.pairs, config.providers,
-                                  ws/"data/raw/broker", args.row_limit)
+            count = broker_export(clickhouse(args.creds_file), start, end, config.pairs, config.providers,
+                                  ws/"data/raw/broker", args.row_limit, windows)
         except Exception:  # noqa: BLE001 - provider errors can echo credentials
             raise ValueError("bounded broker export failed or hit limits; narrow dates/check explicit credentials") from None
         output(status="exported", chunks=count, path=ws/"data/raw/broker")

@@ -120,6 +120,16 @@ def test_per_side_staleness_survives_pairing():
     assert pd.isna(result.iloc[0].ask)  # Never backfill a future ask.
 
 
+def test_same_timestamp_broker_updates_are_invalid_not_guessed():
+    rows = pd.DataFrame({"symbol_name": ["EURUSD"]*5, "side": [0, 1, 1, 1, 0],
+                         "time_received": [100, 100, 100, 200, 300], "price": [1.0, 1.01, 1.02, 1.03, 1.0],
+                         "size": [1]*5, "indicative_flags": [0]*5, "disabled_flags": [0]*5})
+    result = broker_snapshots(rows, "Broadway", {"EURUSD": 100000})
+    assert result.recv_ns.tolist() == [100, 200, 300]
+    assert result.indicative_flags.tolist() == [1, 0, 0]  # 100: two asks, flagged; 200: the next clean ask
+    assert result.iloc[0].ask in (1.01, 1.02)  # one of the observed prices, never an average
+
+
 def test_prepare_and_basis_no_future_outcomes(bundle, config):
     audits = audit(bundle, config, True)
     observed, coverage = prepare(bundle, audits, config)
@@ -134,6 +144,14 @@ def test_prepare_and_basis_no_future_outcomes(bundle, config):
         bundle["quotes"].loc[mask, ["bid", "ask"]] += 1
     changed, _ = prepare(bundle, audits, config)
     assert original.equals(changed.basis)
+
+
+def test_missing_last_trade_removes_only_the_frozen_arm(bundle, config):
+    audits = audit(bundle, config, True)
+    bundle["trades"] = bundle["trades"].iloc[0:0]
+    observed, coverage = prepare(bundle, audits, config)
+    assert set(observed.arm) == {"sunday_preopen", "weekday_preopen"}
+    assert (coverage.rejection == "").all() and coverage.frozen_rejection.str.contains("last-tradable").all()
 
 
 def test_rejected_audit_preserves_exact_ns(bundle, config):

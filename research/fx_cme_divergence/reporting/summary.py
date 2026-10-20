@@ -15,7 +15,7 @@ def report(directory):
     directory = Path(directory)
     manifest = verify(directory, ["ledger.csv", "config.json"])
     ledger = pd.read_csv(directory/"ledger.csv", keep_default_na=False)
-    label = "SYNTHETIC — NOT EMPIRICAL" if manifest["provenance"].get("synthetic") else "THREE-MONTH PILOT"
+    label = "SYNTHETIC — NOT EMPIRICAL" if manifest["provenance"].get("synthetic") else "PILOT, SMALL SAMPLE"
     keys = ["pair", "provider", "arm", "candidate", "split"]
     summary = ledger.groupby(keys, dropna=False).agg(
         sessions=("status", "size"), closed=("status", lambda x: (x == "closed").sum()),
@@ -43,7 +43,7 @@ def report(directory):
         fig.savefig(figures/"event_pnl.png", dpi=120)
         plt.close(fig)
     text = ("Unknown fees/financing remain provisional. Missing exits are open and unpriced, not zero-profit. "
-            "Approximately 13 Sundays in a full three-month sample cannot establish robust alpha. "
+            "A few Sundays and weekday closures cannot establish robust alpha. "
             "Crosses and providers are correlated. No configurations were fitted on validation/test. "
             "Frozen CME is stale, not ground truth; CME catching up at reopen is not broker convergence.")
     (directory/"report.html").write_text(

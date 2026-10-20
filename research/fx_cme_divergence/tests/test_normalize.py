@@ -27,11 +27,15 @@ def frames():
                         "ts_event": [CLOSE-5*NS-1, CLOSE-4*NS-1, CLOSE-4*NS-1],
                         "bid_px_00": [Decimal("1.1000"), undefined, Decimal("1.1100")],
                         "ask_px_00": [Decimal("1.1002"), Decimal("1.1003"), Decimal("1.1102")],
-                        "bid_sz_00": [3, 3, 3], "ask_sz_00": [4, 4, 4]})
+                        "bid_sz_00": [3, 3, 3], "ask_sz_00": [4, 4, 4], "sequence": [100, 101, 101]})
     trades = pd.DataFrame({"instrument_id": [11, 11], "ts_recv": [CLOSE-6*NS, CLOSE-3*NS],
                            "ts_event": [CLOSE-6*NS-1, CLOSE-3*NS-1], "price": [Decimal("1.1001")]*2,
                            "size": [5, 7]})
-    return {"definition": definition, "status": status, "mbp-1": mbp, "trades": trades}, iid
+    data = {"definition": definition, "status": status, "mbp-1": mbp, "trades": trades}
+    for frame in data.values():  # Databento's reader yields uint64 times; mixing with int64 would become float64
+        for column in {"ts_recv", "ts_event", "expiration"} & set(frame):
+            frame[column] = frame[column].astype("uint64")
+    return data, iid
 
 
 @pytest.fixture
@@ -80,9 +84,26 @@ def test_normalize_builds_sealed_point_in_time_bundle(inputs):
     assert cme.bid_size.iloc[0] == 3 * 125000 and cme.bid.isna().sum() == 1
     assert (tables["volumes"].available_ns >= tables["volumes"].session_end_ns + NS).all()
     assert set(tables["status"].phase) == {"close", "preopen", "reopen"} and len(tables["status"]) == 3
-    read_bundle(inputs / "bundle")  # hashes, required files and exact-integer timestamp columns
+    loaded, _ = read_bundle(inputs / "bundle")  # hashes, required files and exact-integer timestamp columns
+    assert loaded["quotes"].bid.dtype == "float64" and loaded["quotes"].bid.isna().any()  # blank is NaN, not ""
+    assert (CLOSE - 5*NS) in set(loaded["quotes"].recv_ns) and loaded["quotes"].recv_ns.dtype == "int64"
     broker = quotes[quotes.venue == "broker"]
     assert broker.bid_size.iloc[0] == 1 * 100000 and broker.ask.isna().iloc[0]
+
+
+def test_same_packet_book_events_keep_the_final_state(inputs, monkeypatch):
+    def with_packet(sequence):
+        data = frames()[0]
+        extra = data["mbp-1"].iloc[[0]].assign(bid_px_00=Decimal("1.1005"), ask_px_00=Decimal("1.1007"),
+                                               sequence=sequence)
+        data["mbp-1"] = pd.concat([data["mbp-1"], extra], ignore_index=True)
+        monkeypatch.setattr(norm, "load_frame", lambda path: data[path.stem].copy())
+    with_packet(100)  # same packet: both events share ts_recv and sequence, the later one is the book state
+    cme = run(inputs)["quotes"].query("venue == 'cme' and instrument_id == 11")
+    assert len(cme) == 2 and cme.sort_values("recv_ns").bid.iloc[0] == 1.1005
+    with_packet(105)  # another packet at the same ts_recv cannot be ordered
+    with pytest.raises(ValueError, match="several packets"):
+        run(inputs)
 
 
 def test_normalize_rejects_tampered_or_costly_downloads(inputs):

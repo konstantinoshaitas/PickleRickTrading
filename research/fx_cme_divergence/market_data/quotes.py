@@ -146,11 +146,16 @@ def prepare(tables, audits, config):
                         fx = asof(active[["ts_ns"]], conversion).reset_index(drop=True)
                         good = validity(fx, active.ts_ns, config.stale_ms*1e6, config.quantity) == ""
                         active["usd_bid"], active["usd_ask"] = fx.bid.where(good), fx.ask.where(good)
+                    frozen_rejection = ""
                     for reference in ("frozen", "preopen"):
                         frame = active.copy()
                         if reference == "frozen":
-                            price, age, arrival = frozen_trade(tables["trades"], contracts, pair,
-                                                              first["close_ns"], config.stale_ms*1e6)
+                            try:
+                                price, age, arrival = frozen_trade(tables["trades"], contracts, pair,
+                                                                  first["close_ns"], config.stale_ms*1e6)
+                            except ValueError as exc:  # A missing last trade removes only the frozen arm.
+                                frozen_rejection = str(exc)
+                                continue
                             frame["reference_bid"] = frame["reference_ask"] = price
                             frame["reference_age_ns"] = frame.ts_ns - first["close_ns"] + age
                             frame["reference_recv_ns"] = arrival
@@ -182,7 +187,8 @@ def prepare(tables, audits, config):
                         frame["symbols"] = "/".join(contracts[r]["raw_symbol"] for r in roots)
                         frame["sunday_carry_anchor"] = first["kind"] == "sunday"
                         observations.append(frame)
-                    coverage.append({**entry, "rejection": "", "broker_rows": len(active),
+                    coverage.append({**entry, "rejection": "", "frozen_rejection": frozen_rejection,
+                                     "broker_rows": len(active),
                                      "invalid_broker_rows": int((active.broker_rejection != "").sum()),
                                      "basis_samples": len(differences)})
                 except ValueError as exc:
