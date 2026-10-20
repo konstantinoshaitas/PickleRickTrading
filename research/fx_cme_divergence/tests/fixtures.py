@@ -67,6 +67,6 @@ def make_bundle(directory, config):
     if not sessions:
         raise ValueError("demo range needs a Sunday or Monday in the first 21 days of a month")
     for name, frame in tables.items():
-        frame.to_csv(directory/f"{name}.csv", index=False)
-    seal(directory, [f"{name}.csv" for name in TABLES], {"synthetic": True, "source": "deterministic fixture v1"})
+        frame.to_parquet(directory/f"{name}.parquet", index=False)
+    seal(directory, [f"{name}.parquet" for name in TABLES], {"synthetic": True, "source": "deterministic fixture v1"})
     return tables

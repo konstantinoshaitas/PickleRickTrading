@@ -1,10 +1,12 @@
 """Zero-cost gate, cache provenance, manifests, CLI strictness. Providers are mocks; no network or secrets."""
 import json
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from .. import __main__ as cli
@@ -122,15 +124,27 @@ def test_manifest_detects_tampering_and_missing_source(tmp_path):
     config = Config(start="2026-07-01", end="2026-08-01", pairs=("EURUSD",), providers=("Broadway",))
     make_bundle(tmp_path, config)
     assert read_bundle(tmp_path)[1]["provenance"]["synthetic"] is True
-    (tmp_path / "quotes.csv").write_text((tmp_path / "quotes.csv").read_text() + "x\n")
+    with (tmp_path / "quotes.parquet").open("ab") as stream:
+        stream.write(b"tampered")
     with pytest.raises(ValueError, match="mismatch"):
         read_bundle(tmp_path)
     with pytest.raises(ValueError, match="source provenance"):
-        seal(tmp_path, ["quotes.csv"], {"synthetic": False})
+        seal(tmp_path, ["quotes.parquet"], {"synthetic": False})
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     assert "db-" not in json.dumps(manifest) and manifest["tir_commit"] == providers.TIR_COMMIT
     with pytest.raises(ValueError, match="missing required files"):
         verify(tmp_path, ["absent.csv"])
+
+
+def test_parquet_bundle_round_trip_preserves_integer_nanoseconds(tmp_path):
+    tables = make_bundle(tmp_path, Config(start="2026-07-01", end="2026-08-01", pairs=("EURUSD",)))
+    quotes = tables["quotes"]
+    quotes["recv_ns"] = pd.Series([2**63 + i for i in range(len(quotes))], dtype="uint64")
+    quotes.to_parquet(tmp_path / "quotes.parquet", index=False)
+    seal(tmp_path, [f"{name}.parquet" for name in tables], {"synthetic": True})
+    loaded, _ = read_bundle(tmp_path)
+    pd.testing.assert_series_equal(loaded["quotes"].recv_ns, quotes.recv_ns)
+    assert loaded["quotes"].event_ns.dtype == "int64"
 
 
 def test_config_is_strict(tmp_path):
@@ -146,6 +160,7 @@ def test_config_is_strict(tmp_path):
     assert load_config(None, start="2026-07-01", end="2026-08-01", stage=None).stage == "baseline"
     sample = Path(cli.ROOT / "configs/pilot.yml")
     assert len(load_config(sample).pairs) == 28 and "password" not in sample.read_text()
+    assert Config().providers == load_config(sample).providers == ("Broadway",)
 
 
 def run(capsys, *argv):
@@ -186,6 +201,7 @@ def test_demo_cli_smoke_is_labelled_synthetic_and_reproducible(capsys, tmp_path)
         assert code == 0, out
         outputs[command] = out
     assert "synthetic" in outputs["demo"] and "prepared_synthetic" in outputs["prepare"]
+    assert all("elapsed_s:" in out and "rows:" in out for out in outputs.values())
     assert "candidate_count: 3" in outputs["backtest"] and "synthetic_only" in outputs["backtest"]
     results = tmp_path / "outputs/results/baseline"
     assert "SYNTHETIC" in (results / "report.html").read_text()
@@ -217,8 +233,10 @@ def test_generated_directories_are_git_ignored():
 
 def test_session_windows_cover_every_estimated_request(tmp_path):
     config = Config(start="2026-07-01", end="2026-08-01", pairs=("EURUSD",), providers=("Broadway",))
-    make_bundle(tmp_path, config)
-    windows = providers.session_windows(tmp_path / "sessions.csv", "2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z")
+    tables = make_bundle(tmp_path, config)
+    calendar = tmp_path / "sessions.csv"
+    tables["sessions"].to_csv(calendar, index=False)
+    windows = providers.session_windows(calendar, "2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z")
     batch = providers.requests("2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z", ["6E.FUT"], windows=windows)
     quotes = [r for r in batch if r.schema == "mbp-1"]
     assert len(quotes) == len(windows) > 1 and len(batch) == len(windows) + 3
@@ -231,43 +249,82 @@ def test_session_windows_cover_every_estimated_request(tmp_path):
 
 def test_session_windows_reject_empty_calendar(tmp_path):
     config = Config(start="2026-07-01", end="2026-08-01", pairs=("EURUSD",), providers=("Broadway",))
-    make_bundle(tmp_path, config)
+    tables = make_bundle(tmp_path, config)
+    tables["sessions"].to_csv(tmp_path / "sessions.csv", index=False)
     with pytest.raises(ValueError, match="no sessions"):
         providers.session_windows(tmp_path / "sessions.csv", "2025-01-01T00:00:00Z", "2025-02-01T00:00:00Z")
 
 
 class Connection:
-    """Read-only ClickHouse stand-in: records the hour bounds of every quote query."""
+    """Read-only stand-in: one count query, then a stream of exact-ns Arrow batches."""
 
-    def __init__(self, rows=0, empty_after=None):
-        self.rows, self.empty_after, self.spans = rows, empty_after, []
+    def __init__(self, rows=2, expected=2, hour_counts=None):
+        self.rows, self.expected, self.queries = rows, expected, []
+        self.hour_counts, self.closed = hour_counts, False
+        self.connection = self
+
+    def close(self):
+        self.closed = True
 
     def query_df(self, sql, params=None, settings=None):
         if "ICMarkets_Risk.symbols" in sql:
             return pd.DataFrame({"symbol_id": [7], "symbol_name": ["EURUSD"]})
         if "system.tables" in sql:
             return pd.DataFrame({"name": ["quotes_Broadway"]})
-        self.spans.append((params["start_ns"], params["end_ns"]))
-        if self.empty_after is not None and params["start_ns"] >= self.empty_after:
-            return pd.DataFrame()  # ClickHouse returns no columns at all when nothing matches
-        return pd.DataFrame({"core_symbol": [7] * self.rows, "price": [1.0] * self.rows})
+        self.queries.append((sql, dict(params)))
+        return self.hour_counts if self.hour_counts is not None else pd.DataFrame(
+            {"epoch_hour": [params["hours"][0]], "rows": [self.expected]})
+
+    def query_arrow_stream(self, sql, params, settings, use_strings):
+        assert settings["readonly"] == 1 and "LIMIT" not in sql and "epoch_hour IN {hours:Array(UInt32)}" in sql
+        self.queries.append((sql, dict(params)))
+        batch = pa.record_batch({"time_received": pa.array([params["lo0"]+1]*self.rows, type=pa.uint64()),
+                                 "symbol_name": ["EURUSD"]*self.rows})
+        return nullcontext(iter([batch]))
 
 
-def test_broker_export_windows_limit_hourly_chunks(tmp_path):
-    hour = 3600 * 10**9
-    base = 1_790_000_000 // 3600 * 3600 * 10**9
-    stamp = lambda n: str(pd.Timestamp(n, unit="ns", tz="UTC"))
-    connection = Connection(rows=2, empty_after=base + 6 * hour)
-    windows = [(base + 5 * hour + hour // 2, base + 7 * hour), (base + 40 * hour, base + 40 * hour + hour // 4)]
-    count = providers.broker_export(connection, stamp(base), stamp(base + 48 * hour), ("EURUSD",), ("Broadway",),
-                                    tmp_path, windows=windows)
-    assert count == 1 and len(connection.spans) == 3  # 3 of 48 hours queried; 2 returned nothing and are skipped
-    assert verify(tmp_path)["provenance"]["empty_chunks"] == 2
-    assert connection.spans == [(base + 5 * hour + hour // 2, base + 6 * hour), (base + 6 * hour, base + 7 * hour),
-                                (base + 40 * hour, base + 40 * hour + hour // 4)]
+def test_broker_export_windows_use_single_stream_and_skip_weekend(tmp_path):
+    config = Config(start="2026-07-03", end="2026-07-06", pairs=("EURUSD",))
+    tables = make_bundle(tmp_path / "inputs", config)
+    calendar = tmp_path / "calendar.csv"
+    tables["sessions"].to_csv(calendar, index=False)
+    start, end = "2026-07-03T00:00:00Z", "2026-07-06T00:00:00Z"
+    windows = providers.session_windows(calendar, start, end, split_closed=True)
+    assert len(windows) == 2
+    saturday = providers.ns("2026-07-04T12:00:00Z")
+    assert not any(lo <= saturday < hi for lo, hi in windows)
+    connection = Connection()
+    assert providers.broker_export(connection, start, end, ("EURUSD",), ("Broadway",), tmp_path / "export",
+                                   windows=windows) == 2
+    assert len(connection.queries) == 2  # count + exactly ONE data query, not one per hour/window
+    assert all(" OR " in sql and params["lo1"] == windows[1][0] for sql, params in connection.queries)
+    assert all(saturday//(3600*10**9) not in params["hours"] for _, params in connection.queries)
+    assert verify(tmp_path / "export")["provenance"]["rows"] == {"Broadway": 2}
     with pytest.raises(ValueError, match="empty"):
-        providers.broker_export(connection, stamp(base), stamp(base + 4 * hour), ("EURUSD",), ("Broadway",),
-                                tmp_path, windows=windows)
-    with pytest.raises(ValueError, match="row cap"):
-        providers.broker_export(Connection(rows=5), stamp(base), stamp(base + hour), ("EURUSD",), ("Broadway",),
-                                tmp_path, row_limit=5)
+        providers.broker_export(connection, start, "2026-07-03T01:00:00Z", ("EURUSD",), ("Broadway",),
+                                tmp_path / "export", windows=windows)
+    with pytest.raises(ValueError, match="row count mismatch"):
+        providers.broker_export(Connection(expected=3), start, end, ("EURUSD",), ("Broadway",), tmp_path / "export")
+    assert not (tmp_path / "export" / "manifest.json").exists()
+    assert not list((tmp_path / "export").glob("*.tmp"))
+    hours = pd.DataFrame({"epoch_hour": [10, 11, 12], "rows": [15_000_000]*3})
+    assert providers.broker_plan(hours) == [([10], 15_000_000), ([11], 15_000_000), ([12], 15_000_000)]
+    assert len(providers.broker_plan(hours.assign(rows=1))) == 1
+    assert len(providers.broker_plan(hours.assign(epoch_hour=[10, 2200, 4400], rows=1))) == 3
+
+
+def test_large_broker_export_uses_separate_parallel_connections(tmp_path):
+    base = providers.ns("2026-07-01T00:00:00Z")//(3600*10**9)
+    counts = pd.DataFrame({"epoch_hour": [base, base+1000], "rows": [1, 1]})
+    connections = []
+
+    def factory():
+        connection = Connection(rows=1)
+        connections.append(connection)
+        return connection
+
+    assert providers.broker_export(Connection(hour_counts=counts), "2026-07-01T00:00:00Z", "2026-09-01T00:00:00Z",
+                                   ("EURUSD",), ("Broadway",), tmp_path, connection_factory=factory) == 2
+    assert len(connections) == 2 and all(c.closed for c in connections)
+    assert {tuple(c.queries[0][1]["hours"]) for c in connections} == {(base,), (base+1000,)}
+    assert len(verify(tmp_path)["files"]) == 2

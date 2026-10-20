@@ -52,16 +52,14 @@ def verify(directory, required=()):
 
 
 def read_bundle(directory):
-    manifest = verify(directory, [f"{t}.csv" for t in TABLES])
-    # Blank means NaN only for the numeric book columns; text columns (pair, provider) keep "" as a value.
-    missing = {c: [""] for c in ("bid", "ask", "bid_size", "ask_size")}
-    tables = {t: pd.read_csv(Path(directory) / f"{t}.csv", keep_default_na=False, na_values=missing,
-                             low_memory=False) for t in TABLES}
+    manifest = verify(directory, [f"{t}.parquet" for t in TABLES])
+    tables = {t: pd.read_parquet(Path(directory) / f"{t}.parquet") for t in TABLES}
     # Never let timestamps pass through float64 (nanoseconds exceed its exact integer range).
     for table in tables.values():
         for column in table:
             if column.endswith("_ns"):
                 if not pd.api.types.is_integer_dtype(table[column]) and len(table):
                     raise ValueError(f"{column} must contain exact integer UTC nanoseconds")
-                table[column] = table[column].astype("int64")
+                if not len(table):
+                    table[column] = table[column].astype("int64")
     return tables, manifest

@@ -55,8 +55,8 @@ def inputs(tmp_path, monkeypatch):
     broker.mkdir()
     pd.DataFrame({"symbol_name": ["EURUSD"]*2, "side": [0, 1], "time_received": [CLOSE-5*NS, CLOSE-5*NS+1],
                   "price": [1.0999, 1.1003], "size": [1, 1], "indicative_flags": [0, 0],
-                  "disabled_flags": [0, 0]}).to_csv(broker / "Broadway_0.csv", index=False)
-    seal(broker, ["Broadway_0.csv"], {"source": "mock read-only export", "synthetic": False})
+                  "disabled_flags": [0, 0]}).astype({"time_received": "uint64"}).to_parquet(broker / "Broadway_0.parquet", index=False)
+    seal(broker, ["Broadway_0.parquet"], {"source": "mock read-only export", "synthetic": False})
     pd.DataFrame([{"session_id": "s1", "root": "6E", "kind": "weekday", "basis_start_ns": CLOSE-600*NS,
                    "basis_end_ns": CLOSE, "close_ns": CLOSE, "preopen_ns": REOPEN-600*NS, "reopen_ns": REOPEN,
                    "boundary_ns": REOPEN+600*NS, "calendar_source": "https://www.cmegroup.com/trading-hours.html",
@@ -85,7 +85,7 @@ def test_normalize_builds_sealed_point_in_time_bundle(inputs):
     assert (tables["volumes"].available_ns >= tables["volumes"].session_end_ns + NS).all()
     assert set(tables["status"].phase) == {"close", "preopen", "reopen"} and len(tables["status"]) == 3
     loaded, _ = read_bundle(inputs / "bundle")  # hashes, required files and exact-integer timestamp columns
-    assert loaded["quotes"].bid.dtype == "float64" and loaded["quotes"].bid.isna().any()  # blank is NaN, not ""
+    assert loaded["quotes"].bid.dtype == "float64" and loaded["quotes"].bid.isna().any()
     assert (CLOSE - 5*NS) in set(loaded["quotes"].recv_ns) and loaded["quotes"].recv_ns.dtype == "int64"
     broker = quotes[quotes.venue == "broker"]
     assert broker.bid_size.iloc[0] == 1 * 100000 and broker.ask.isna().iloc[0]

@@ -3,6 +3,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from time import perf_counter
 
 from .config import LEGS, Config, load_config
 from .data_access.storage import read_bundle, seal, verify, write_json
@@ -48,7 +49,7 @@ def parser():
         sub.add_argument("--start", help="UTC inclusive YYYY-MM-DD (default: 3 completed months ago)")
         sub.add_argument("--end", help="UTC exclusive YYYY-MM-DD (default: current month's first day)")
         sub.add_argument("--pairs", help="comma-separated verified pairs, or all (default: all 28)")
-        sub.add_argument("--providers", help="comma-separated Broadway,ICMLD,Finalto (default: first two)")
+        sub.add_argument("--providers", help="comma-separated Broadway,ICMLD,Finalto (default: Broadway)")
         if command in {"estimate", "fetch"}:
             sub.add_argument("--request-start", required=True, help="inclusive timezone-aware request timestamp")
             sub.add_argument("--request-end", required=True, help="exclusive request timestamp; <=366 days, split into <=90-day requests")
@@ -66,15 +67,14 @@ def parser():
         if command == "broker-fetch":
             sub.add_argument("--creds-file", type=Path, required=True,
                              help="explicit ~/.config/ch-axi/creds.toml; [prod] reused securely")
-            sub.add_argument("--row-limit", type=int, default=200000, help="per hourly chunk; saturation refuses")
-            sub.add_argument("--calendar", type=Path, help="official-calendar sessions CSV; exports only its "
-                             "basis->boundary windows instead of every hour of [start, end); --start must reach the "
+            sub.add_argument("--calendar", type=Path, help="official-calendar sessions CSV; exports its "
+                             "basis and preopen->boundary windows, skipping closed gaps; --start must reach the "
                              "Friday basis of a first-Sunday session")
         if command == "normalize":
             for name in ("downloads", "broker-chunks", "calendar", "contract-terms", "broker-size-units"):
                 sub.add_argument("--"+name, type=Path, required=True)
         if command in {"audit", "prepare"}:
-            sub.add_argument("--inputs", type=Path, help="default data/inputs/bundle; hashed normalized CSVs")
+            sub.add_argument("--inputs", type=Path, help="default data/inputs/bundle; hashed normalized Parquet tables")
             sub.add_argument("--allow-calendar-fallback", action="store_true", default=None,
                              help="explicitly allow sourced calendar if status absent; marked in audit")
         if command in {"prepare", "backtest"}:
@@ -111,16 +111,19 @@ def run(args, config):
     for folder in ("data/inputs", "data/raw", "data/processed", "outputs/audits", "outputs/results", "outputs/figures"):
         (ws/folder).mkdir(parents=True, exist_ok=True)
     command = args.command
+    rows = None  # Metadata estimates/raw DBN fetches do not decode market-data rows.
     if command == "demo":
         from .tests.fixtures import make_bundle
         path = ws/"data/inputs/bundle"
-        make_bundle(path, config)
+        tables = make_bundle(path, config)
+        rows = sum(map(len, tables.values()))
         output(status="synthetic_only", inputs=path, pairs=len(config.pairs))
     elif command == "official-inputs":
         from .data_access.official import calendar, contract_terms
         path = ws/"data/official"
         count = calendar(config, path)
         terms, exclusions = contract_terms(args.downloads, path) if args.downloads else (0, 0)
+        rows = count + terms + exclusions
         output(status="official_inputs", session_products=count, verified_terms=terms,
                excluded_terms=exclusions, path=path)
     elif command in {"estimate", "fetch"}:
@@ -148,20 +151,25 @@ def run(args, config):
             raise ValueError("data access failed; verify pinned install, explicit credential file and entitlement; no secrets logged") from None
     elif command == "broker-fetch":
         from .data_access.providers import broker_export, clickhouse, session_windows
-        if not 1 <= args.row_limit <= 1000000:
-            raise UsageError("--row-limit must be 1..1000000")
         start, end = config.start+"T00:00:00Z", config.end+"T00:00:00Z"
-        windows = session_windows(args.calendar, start, end) if args.calendar else None
+        windows = session_windows(args.calendar, start, end, split_closed=True) if args.calendar else None
+        connection = None
         try:
-            count = broker_export(clickhouse(args.creds_file), start, end, config.pairs, config.providers,
-                                  ws/"data/raw/broker", args.row_limit, windows)
+            connection = clickhouse(args.creds_file)
+            rows = broker_export(connection, start, end, config.pairs, config.providers,
+                                 ws/"data/raw/broker", windows=windows,
+                                 connection_factory=lambda: clickhouse(args.creds_file), on_plan=output)
         except Exception:  # noqa: BLE001 - provider errors can echo credentials
-            raise ValueError("bounded broker export failed or hit limits; narrow dates/check explicit credentials") from None
-        output(status="exported", chunks=count, path=ws/"data/raw/broker")
+            raise ValueError("bounded broker export failed or row counts differ; check dates/credentials and retry") from None
+        finally:
+            if connection is not None:
+                connection.connection.close()
+        output(status="exported", path=ws/"data/raw/broker")
     elif command == "normalize":
         from .data_access.normalize import normalize
-        normalize(args.downloads, args.broker_chunks, args.calendar, args.contract_terms,
-                  args.broker_size_units, ws/"data/inputs/bundle")
+        tables = normalize(args.downloads, args.broker_chunks, args.calendar, args.contract_terms,
+                           args.broker_size_units, ws/"data/inputs/bundle")
+        rows = sum(map(len, tables.values()))
         output(status="normalized", inputs=ws/"data/inputs/bundle")
     elif command in {"audit", "prepare"}:
         from .market_data.contracts import audit
@@ -174,6 +182,7 @@ def run(args, config):
         audit_path = ws/"outputs/audits/contracts.csv"
         audits.to_csv(audit_path, index=False)
         if command == "audit":
+            rows = len(audits)
             output(status="synthetic_audit" if synthetic else "audit", sessions=len(audits),
                    rejected=int((audits.rejection != "").sum()), path=audit_path)
         else:
@@ -198,7 +207,8 @@ def run(args, config):
             seal(path, ["observations.parquet", "config.json", "coverage.csv", "contracts.csv"],
                  {"synthetic": synthetic, "source": "causal prepared normalized inputs",
                   "input_manifest": manifest})
-            output(status="prepared_synthetic" if synthetic else "prepared", rows=len(observations), path=path)
+            rows = len(observations)
+            output(status="prepared_synthetic" if synthetic else "prepared", path=path)
     elif command == "backtest":
         import pandas as pd
 
@@ -225,13 +235,16 @@ def run(args, config):
         write_json(results/"config.json", config.dump())
         seal(results, ["ledger.csv", "config.json"], {"synthetic": manifest["provenance"].get("synthetic", False),
              "source": "stock vectorbt 0.28.1 independent quote-currency accounts", "prepared_manifest": manifest})
+        rows = len(ledger)
         output(status="synthetic_only" if manifest["provenance"].get("synthetic") else "pilot_only",
-               rows=len(ledger), closed=int((ledger.status == "closed").sum()), results=results)
+               closed=int((ledger.status == "closed").sum()), results=results)
         print_results(ledger)
     elif command == "report":
         from .reporting.summary import report
         path = args.results or ws/f"outputs/results/{config.stage}"
-        output(status="reported", groups=report(path), path=path/"report.html")
+        rows = report(path)
+        output(status="reported", groups=rows, path=path/"report.html")
+    return rows
 
 
 def main(argv=None):
@@ -242,8 +255,10 @@ def main(argv=None):
                    data_status="no data loaded", cost_authority_usd=0,
                    help=f"{PROG} demo --help; {PROG} estimate --help")
             return 0
+        started = perf_counter()
         config = settings(args)
-        run(args, config)
+        rows = run(args, config)
+        output(elapsed_s=round(perf_counter()-started, 3), rows=rows)
         return 0
     except UsageError as exc:
         output(error=str(exc), help=f"{PROG} --help")
