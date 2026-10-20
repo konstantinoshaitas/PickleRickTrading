@@ -4,8 +4,9 @@ import json
 import sys
 from pathlib import Path
 
-from .config import PAIRS, Config, load_config
+from .config import LEGS, Config, load_config
 from .data_access.storage import read_bundle, seal, verify, write_json
+from .products import SUPPORTED_PAIRS
 
 ROOT = Path(__file__).resolve().parent
 PROG = "python -m research.fx_cme_divergence"
@@ -27,6 +28,7 @@ def parser():
     subs = p.add_subparsers(dest="command", parser_class=Parser)
     descriptions = {
         "demo": "Generate deterministic synthetic inputs, never empirical data",
+        "official-inputs": "Write the sourced 180-day CME calendar; optionally verify downloaded contract terms",
         "estimate": "Free metadata estimate for all four CME schemas; no data download",
         "fetch": "Download only after complete fresh USD 0 estimates (no credits)",
         "broker-fetch": "Bounded read-only LP export using explicit ch-axi credentials",
@@ -45,12 +47,12 @@ def parser():
         sub.add_argument("--config", type=Path, help="strict settings YAML; no credentials; flags override")
         sub.add_argument("--start", help="UTC inclusive YYYY-MM-DD (default: 3 completed months ago)")
         sub.add_argument("--end", help="UTC exclusive YYYY-MM-DD (default: current month's first day)")
-        sub.add_argument("--pairs", help="comma-separated supported pairs (default: all six)")
+        sub.add_argument("--pairs", help="comma-separated verified pairs, or all (default: all 28)")
         sub.add_argument("--providers", help="comma-separated Broadway,ICMLD,Finalto (default: first two)")
         if command in {"estimate", "fetch"}:
             sub.add_argument("--request-start", required=True, help="inclusive timezone-aware request timestamp")
-            sub.add_argument("--request-end", required=True, help="exclusive request timestamp; <=100 days")
-            sub.add_argument("--symbols", default="6E.FUT,6A.FUT,6N.FUT", help="bounded parent/raw CME symbols")
+            sub.add_argument("--request-end", required=True, help="exclusive request timestamp; <=366 days, split into <=90-day requests")
+            sub.add_argument("--symbols", help="bounded parent/raw CME symbols (default: parents required by --pairs)")
             sub.add_argument("--stype", choices=("parent", "raw_symbol"), default="parent")
             sub.add_argument("--calendar", type=Path, help="official-calendar sessions CSV; limits mbp-1 to its "
                              "basis->boundary windows (all windows are estimated; definitions/status/trades stay full range)")
@@ -59,6 +61,8 @@ def parser():
             sub.add_argument("--max-bytes", type=int, default=5_000_000_000,
                              help="fetch refuses larger zero-cost totals (default 5 GB billable)")
             sub.add_argument("--cache-root", type=Path, help="default data/raw/tir (outside TIR_Tools repository)")
+        if command == "official-inputs":
+            sub.add_argument("--downloads", type=Path, help="optional zero-cost download manifest; writes checked terms.csv offline")
         if command == "broker-fetch":
             sub.add_argument("--creds-file", type=Path, required=True,
                              help="explicit ~/.config/ch-axi/creds.toml; [prod] reused securely")
@@ -91,7 +95,8 @@ def settings(args):
                  "slippage_bps", "financing_quote", "allow_calendar_fallback")}
     for key in ("pairs", "providers"):
         if getattr(args, key, None) is not None:
-            overrides[key] = tuple(getattr(args, key).split(","))
+            value = getattr(args, key)
+            overrides[key] = SUPPORTED_PAIRS if key == "pairs" and value == "all" else tuple(value.split(","))
     return load_config(args.config, **overrides)
 
 
@@ -110,13 +115,22 @@ def run(args, config):
         from .tests.fixtures import make_bundle
         path = ws/"data/inputs/bundle"
         make_bundle(path, config)
-        output(status="synthetic_only", inputs=path, pairs=len(PAIRS))
+        output(status="synthetic_only", inputs=path, pairs=len(config.pairs))
+    elif command == "official-inputs":
+        from .data_access.official import calendar, contract_terms
+        path = ws/"data/official"
+        count = calendar(config, path)
+        terms, exclusions = contract_terms(args.downloads, path) if args.downloads else (0, 0)
+        output(status="official_inputs", session_products=count, verified_terms=terms,
+               excluded_terms=exclusions, path=path)
     elif command in {"estimate", "fetch"}:
         from .data_access.providers import client, estimate_all, fetch_zero, requests, session_windows
         if args.max_cost != 0:
             raise UsageError("--max-cost must be 0; no credit consumption permitted")
         windows = session_windows(args.calendar, args.request_start, args.request_end) if args.calendar else None
-        batch = requests(args.request_start, args.request_end, args.symbols.split(","), args.stype, windows)
+        symbols = args.symbols.split(",") if args.symbols else [r+".FUT" for r in sorted(
+            {r for pair in config.pairs for r in LEGS[pair]})]
+        batch = requests(args.request_start, args.request_end, symbols, args.stype, windows)
         path = ws/"outputs/audits/cost.json"
         try:
             provider = client(args.env_file, args.cache_root or ws/"data/raw/tir")
@@ -166,6 +180,13 @@ def run(args, config):
             from .market_data.quotes import prepare
             observations, coverage = prepare(tables, audits, config)
             coverage.to_csv(ws/"outputs/audits/coverage.csv", index=False)
+            if not observations.empty:
+                import pandas as pd
+                gates = []
+                for column in ("broker_rejection", "reference_rejection"):
+                    counts = observations.groupby(["pair", "provider", "arm", column]).size().reset_index(name="rows")
+                    gates.append(counts.rename(columns={column: "reason"}).assign(gate=column))
+                pd.concat(gates, ignore_index=True).to_csv(ws/"outputs/audits/quote_gates.csv", index=False)
             if observations.empty:
                 raise ValueError("no valid prepared sessions; inspect contract/coverage audits")
             path = ws/"data/processed/prepared"
@@ -193,15 +214,20 @@ def run(args, config):
                 raise ValueError(f"prepared config differs at {key}; reuse original config or prepare again")
         observations = pd.read_parquet(path/"observations.parquet")
         output(candidate_count=len(candidates(config.stage)), stage=config.stage)
-        ledger = account(signals(observations, config), config)
+        from .reporting.trades import display_ledger, print_results, summaries
+        ledger = display_ledger(account(signals(observations, config), config))
         results = ws/f"outputs/results/{config.stage}"
         results.mkdir(parents=True, exist_ok=True)
         ledger.to_csv(results/"ledger.csv", index=False)
+        ledger[ledger.status.isin(["closed", "unpriced_open"])].to_csv(results/"trades.csv", index=False)
+        for name, frame in summaries(ledger).items():
+            frame.to_csv(results/f"{name}.csv", index=False)
         write_json(results/"config.json", config.dump())
         seal(results, ["ledger.csv", "config.json"], {"synthetic": manifest["provenance"].get("synthetic", False),
              "source": "stock vectorbt 0.28.1 independent quote-currency accounts", "prepared_manifest": manifest})
         output(status="synthetic_only" if manifest["provenance"].get("synthetic") else "pilot_only",
                rows=len(ledger), closed=int((ledger.status == "closed").sum()), results=results)
+        print_results(ledger)
     elif command == "report":
         from .reporting.summary import report
         path = args.results or ws/f"outputs/results/{config.stage}"
@@ -212,7 +238,7 @@ def main(argv=None):
     try:
         args = parser().parse_args(argv)
         if args.command is None:
-            output(bin=Path(__file__).resolve(), description="Offline-first six-pair FX/CME pilot",
+            output(bin=Path(__file__).resolve(), description="Offline-first FX/CME research: FROZEN last price and INDICATIVE pre-open mid",
                    data_status="no data loaded", cost_authority_usd=0,
                    help=f"{PROG} demo --help; {PROG} estimate --help")
             return 0

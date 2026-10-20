@@ -20,7 +20,7 @@ test = ["pytest>=8,<9", "ruff>=0.12,<1"]
 include = ["research*"]
 
 [tool.setuptools.package-data]
-"research.fx_cme_divergence" = ["configs/*.yml"]
+"research.fx_cme_divergence" = ["configs/*.yml", "configs/*.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["research/fx_cme_divergence/tests"]

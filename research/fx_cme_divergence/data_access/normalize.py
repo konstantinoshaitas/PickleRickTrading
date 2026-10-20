@@ -106,10 +106,16 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     from ..market_data.contracts import chicago_ns
     starts = [int(r["request"]["start"]) for r in downloads if r["request"]["schema"] == "trades"]
     ends = [int(r["request"]["end"]) for r in downloads if r["request"]["schema"] == "trades"]
+    spans = []
+    for a, b in sorted(zip(starts, ends)):
+        if spans and a <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], b)
+        else:
+            spans.append([a, b])
     for (iid, day), group in trades.groupby(["instrument_id", "local_end_day"]):
         opening_day = pd.Timestamp(day)-pd.Timedelta(days=1)
         opening, ending = chicago_ns(str(opening_day.date()), "17:00"), chicago_ns(str(day), "16:00")
-        if not any(a <= opening and b >= ending+NS for a, b in zip(starts, ends)):
+        if not any(a <= opening and b >= ending+NS for a, b in spans):
             continue
         group = group[(group.event_ns >= opening) & (group.event_ns < ending)]
         volumes.append({"root": ids.loc[iid].root, "instrument_id": iid, "session_end_ns": ending,
@@ -121,6 +127,12 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     for row in sessions.itertuples(index=False):
         root_ids = ids[ids.root == row.root].index
         events = statuses[statuses.instrument_id.isin(root_ids)]
+        breaks = events[(events.ts_event > row.preopen_ns) & (events.ts_event < row.reopen_ns) &
+                        events.action.astype(int).isin([int(db.StatusAction.CLOSE), int(db.StatusAction.PAUSE),
+                                                        int(db.StatusAction.TRADING)])]
+        if not breaks.empty:
+            observed.append({"session_id": row.session_id, "root": row.root, "phase": "unexpected_transition",
+                             "event_ns": int(breaks.ts_event.iloc[0]), "recv_ns": int(breaks.ts_recv.iloc[0])})
         for phase, actions in (("close", (int(db.StatusAction.CLOSE), int(db.StatusAction.PAUSE))),
                                ("preopen", (int(db.StatusAction.PRE_OPEN),)),
                                ("reopen", (int(db.StatusAction.TRADING),))):

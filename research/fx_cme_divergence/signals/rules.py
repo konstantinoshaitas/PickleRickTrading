@@ -55,20 +55,33 @@ def direction(row, limit):
     return 0
 
 
+def entry_size(row, side, config):
+    """Long buys base at its USD ask; short sells it at its USD bid, known at entry."""
+    rate = getattr(row, "base_usd_ask" if side > 0 else "base_usd_bid", np.nan)
+    if config.quantity is not None:
+        return config.quantity, config.quantity*rate
+    if not np.isfinite(rate) or rate <= 0:
+        return np.nan, config.notional_usd
+    return config.notional_usd/rate, config.notional_usd
+
+
 def trade_signal(frame, candidate, config):
     frame = frame.sort_values("ts_ns").reset_index(drop=True)
     first = frame.iloc[0]
     base = {"session_id": first.session_id, "pair": first.pair, "provider": first.provider,
             "arm": first.arm, "candidate": candidate.name, "symbols": first.symbols,
+            "reference_rule": getattr(first, "reference_rule", "FROZEN" if first.arm.endswith("frozen") else "INDICATIVE"),
             "reopen_ns": int(first.reopen_ns), "basis": first.basis,
-            "basis_cutoff_ns": int(first.basis_cutoff_ns), "status": "no_signal"}
+            "basis_cutoff_ns": int(first.basis_cutoff_ns), "status": "no_signal",
+            "rejection_reason": "threshold_or_quote_validity"}
     last_side, began, last_time = 0, None, None
     signal = None
     for row in frame.itertuples(index=False):
         if row.ts_ns >= row.reopen_ns:
             break
-        valid = row.broker_rejection == "" and row.reference_rejection == ""
-        side = direction(row, threshold(row, candidate)) if valid else 0
+        side = direction(row, threshold(row, candidate)) if row.reference_rejection == "" else 0
+        if side and row.broker_rejection != "":
+            side = 0
         if side != last_side or last_time is None or row.ts_ns-last_time > config.stale_ms*1e6:
             began = row.ts_ns if side else None
         last_side, last_time = side, row.ts_ns
@@ -78,20 +91,38 @@ def trade_signal(frame, candidate, config):
     if signal is None:
         return base
     side = last_side
-    base.update({"signal_ns": int(signal.ts_ns), "direction": side,
+    base.update({"signal_ns": int(signal.ts_ns), "direction": side, "rejection_reason": "",
+                 "side": "buy" if side > 0 else "sell",
                  "threshold": threshold(signal, candidate), "raw_residual": signal.raw_residual,
                  "adjusted_residual": signal.adjusted_residual, "reference_mid": signal.reference_mid,
                  "reference_recv_ns": int(signal.reference_recv_ns),
                  "reference_age_ns": int(signal.reference_age_ns), "book_state": signal.book_state,
+                 "reference_crossed": bool(getattr(signal, "reference_crossed", False)),
                  "signal_bid": signal.bid, "signal_ask": signal.ask,
                  "sunday_carry_anchor": bool(signal.sunday_carry_anchor)})
     earliest = signal.ts_ns + max(1, int(config.latency_ms*1e6))
-    entries = frame[(frame.ts_ns >= earliest) & (frame.ts_ns < signal.reopen_ns) &
-                    (frame.ts_ns <= earliest+int(config.stale_ms*1e6)) & (frame.broker_rejection == "")]
-    if entries.empty:
-        return {**base, "status": "unfillable_entry"}
-    entry = entries.iloc[0]
-    base.update({"entry_ns": int(entry.ts_ns), "entry_bid": entry.bid, "entry_ask": entry.ask,
+    entry_side = "ask" if side > 0 else "bid"
+    window = frame[(frame.ts_ns >= earliest) & (frame.ts_ns < signal.reopen_ns) &
+                   (frame.ts_ns <= earliest+int(config.stale_ms*1e6))]
+    entry = None
+    reasons = set()
+    for row in window.itertuples(index=False):
+        reason = row.broker_rejection
+        quantity, notional = entry_size(row, side, config)
+        if reason:
+            reasons.add(reason)
+        elif not np.isfinite(quantity):
+            reasons.add("missing_fresh_base_usd_conversion")
+        elif getattr(row, entry_side+"_size") < quantity:
+            reasons.add("insufficient_size_for_usd_notional")
+        else:
+            entry = row
+            break
+    if entry is None:
+        return {**base, "status": "unfillable_entry",
+                "rejection_reason": "|".join(sorted(reasons)) or "no_quote_within_entry_wait"}
+    base.update({"quantity_base": quantity, "notional_usd": notional,
+                 "entry_ns": int(entry.ts_ns), "entry_bid": entry.bid, "entry_ask": entry.ask,
                  "entry_age_ns": int(max(entry.ts_ns-entry.bid_recv_ns, entry.ts_ns-entry.ask_recv_ns)),
                  "entry_price": float(entry.ask if side > 0 else entry.bid)})
     # Baseline time uses actual reopening event AND its receive availability, not an invented auction.
@@ -114,7 +145,8 @@ def trade_signal(frame, candidate, config):
                 break
     exits = frame[(frame.ts_ns >= target) & (frame.ts_ns > entry.ts_ns) &
                   (frame.ts_ns <= min(target+int(config.exit_wait_s*NS), deadline)) &
-                  (frame.broker_rejection == "")]
+                  (frame.broker_rejection == "") &
+                  (frame["bid_size" if side > 0 else "ask_size"] >= quantity)]
     if exits.empty:
         return {**base, "status": "unpriced_open", "exit_reason": "missing_exit",
                 "exit_target_ns": target}

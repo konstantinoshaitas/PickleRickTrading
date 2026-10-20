@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
+from ..config import PIP
+
 
 def roundtrip(entry_price, exit_price, direction, quantity, cash, commission_bps=0,
               slippage_bps=0, financing_quote=0):
@@ -26,7 +28,6 @@ def roundtrip(entry_price, exit_price, direction, quantity, cash, commission_bps
 def account(ledger, config):
     ledger = ledger.copy()
     for i, row in ledger.iterrows():
-        ledger.loc[i, "quantity_base"] = config.quantity
         ledger.loc[i, "latency_ms"] = config.latency_ms
         ledger.loc[i, "slippage_bps"] = config.slippage_bps
         ledger.loc[i, "commission_bps"] = config.commission_bps if config.commission_bps is not None else np.nan
@@ -36,9 +37,13 @@ def account(ledger, config):
                                        config.financing_quote is not None else "gross_provisional_unknown_costs")
         if row.status != "closed":
             continue
-        gross = roundtrip(row.entry_price, row.exit_price, int(row.direction), config.quantity, config.cash)
+        quantity = float(row.quantity_base)
+        # These are independent, fully funded accounts, not shared-capital or leveraged positions.
+        cash = config.cash if config.quantity is not None else max(
+            config.cash, 2*quantity*max(row.entry_price, row.exit_price))
+        gross = roundtrip(row.entry_price, row.exit_price, int(row.direction), quantity, cash)
         # A second stock-engine run is a sensitivity, NOT a second accounting implementation.
-        costs = roundtrip(row.entry_price, row.exit_price, int(row.direction), config.quantity, config.cash,
+        costs = roundtrip(row.entry_price, row.exit_price, int(row.direction), quantity, cash,
                           config.commission_bps or 0, config.slippage_bps, config.financing_quote or 0)
         ledger.loc[i, "gross_pnl_quote"] = gross["pnl"]
         ledger.loc[i, "scenario_pnl_quote"] = costs["pnl"]
@@ -49,6 +54,13 @@ def account(ledger, config):
         rate = row.usd_bid if costs["pnl"] >= 0 else row.usd_ask
         ledger.loc[i, "usd_conversion"] = rate
         ledger.loc[i, "scenario_pnl_usd"] = costs["pnl"]*rate
+        gross_rate = row.usd_bid if gross["pnl"] >= 0 else row.usd_ask
+        ledger.loc[i, "gross_pnl_usd"] = gross["pnl"]*gross_rate
+        ledger.loc[i, "costs_usd"] = gross["pnl"]*gross_rate-costs["pnl"]*rate
+        ledger.loc[i, "pips"] = gross["pnl"]/quantity/PIP[row.pair]
+        ledger.loc[i, "net_pips"] = costs["pnl"]/quantity/PIP[row.pair]
+        ledger.loc[i, "hold_s"] = (int(row.exit_ns)-int(row.entry_ns))/1e9
+        ledger.loc[i, "side"] = "buy" if row.direction > 0 else "sell"
         if not np.isfinite(rate):
             ledger.loc[i, "cost_status"] = "unpriced_usd_conversion"
     return ledger

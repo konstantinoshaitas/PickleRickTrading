@@ -89,7 +89,7 @@ def test_positive_cap_and_partial_batches_are_rejected(tmp_path):
 
 def test_request_bounds_rejected_before_api():
     with pytest.raises(ValueError):
-        providers.requests("2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", ["6E.FUT"])
+        providers.requests("2025-01-01T00:00:00Z", "2026-06-01T00:00:00Z", ["6E.FUT"])
     with pytest.raises(ValueError):
         providers.requests(END, START, ["6E.FUT"])
     with pytest.raises(ValueError):
@@ -138,14 +138,14 @@ def test_config_is_strict(tmp_path):
     bad.write_text("api_key: nope\n")
     with pytest.raises(ValueError, match="unknown config keys"):
         load_config(bad)
-    for kwargs in ({"start": "2026-07-01", "end": "2026-06-01"}, {"start": "2026-01-01", "end": "2026-07-01"},
-                   {"pairs": ("GBPUSD",)}, {"stale_ms": 0}, {"commission_bps": -1},
+    for kwargs in ({"start": "2026-07-01", "end": "2026-06-01"}, {"start": "2025-01-01", "end": "2026-07-01"},
+                   {"pairs": ("USDEUR",)}, {"stale_ms": 0}, {"commission_bps": -1},
                    {"start": "2026-07-01T12:00:00", "end": "2026-08-01"}):
         with pytest.raises(ValueError):
             Config(**kwargs)
     assert load_config(None, start="2026-07-01", end="2026-08-01", stage=None).stage == "baseline"
     sample = Path(cli.ROOT / "configs/pilot.yml")
-    assert load_config(sample).pairs[0] == "EURUSD" and "password" not in sample.read_text()
+    assert len(load_config(sample).pairs) == 28 and "password" not in sample.read_text()
 
 
 def run(capsys, *argv):

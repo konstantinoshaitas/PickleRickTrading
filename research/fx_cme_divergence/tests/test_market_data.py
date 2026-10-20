@@ -23,7 +23,8 @@ def bundle(tmp_path, config):
 def test_completed_months_and_pips():
     assert completed_months("2026-10-19") == ("2026-07-01", "2026-10-01")
     assert completed_months("2026-01-02") == ("2025-10-01", "2026-01-01")
-    assert set(PIP.values()) == {0.0001}
+    assert set(PIP.values()) == {0.0001, 0.01}
+    assert PIP["USDJPY"] == PIP["EURJPY"] == .01
 
 
 def test_chicago_dst_and_nonexistent_time():
@@ -101,9 +102,9 @@ def test_cross_sides_size_and_tenor():
 
 
 @pytest.mark.parametrize("column,value,expected", [
-    ("indicative_flags", 1, "flags"), ("disabled_flags", 1, "flags"),
-    ("bid", 3, "crossed_or_locked"), ("bid_size", 0, "insufficient_size"),
-    ("recv_ns", 20, "stale_or_future"), ("recv_ns", 1, "stale_or_future")])
+    ("indicative_flags", 1, "disabled_or_indicative_flag"), ("disabled_flags", 1, "disabled_or_indicative_flag"),
+    ("bid", 3, "crossed_or_locked_book"), ("bid_size", 0, "insufficient_size"),
+    ("recv_ns", 20, "received_after_decision"), ("recv_ns", 1, "book_age_exceeded")])
 def test_quote_rejections(column, value, expected):
     frame = leg(1, 2)
     frame[column] = value
@@ -116,7 +117,7 @@ def test_per_side_staleness_survives_pairing():
                          "size": [1]*3, "indicative_flags": [0]*3, "disabled_flags": [0]*3})
     result = broker_snapshots(rows, "Broadway", {"EURUSD": 100000})
     assert result.iloc[-1].bid_recv_ns == 100
-    assert validity(result, result.recv_ns, 50, 1000).iloc[-1] == "stale_side"
+    assert validity(result, result.recv_ns, 50, 1000).iloc[-1] == "bid_side_age_exceeded"
     assert pd.isna(result.iloc[0].ask)  # Never backfill a future ask.
 
 
@@ -151,7 +152,7 @@ def test_missing_last_trade_removes_only_the_frozen_arm(bundle, config):
     bundle["trades"] = bundle["trades"].iloc[0:0]
     observed, coverage = prepare(bundle, audits, config)
     assert set(observed.arm) == {"sunday_preopen", "weekday_preopen"}
-    assert (coverage.rejection == "").all() and coverage.frozen_rejection.str.contains("last-tradable").all()
+    assert (coverage.rejection == "").all() and coverage.frozen_rejection.str.contains("FROZEN unavailable").all()
 
 
 def test_rejected_audit_preserves_exact_ns(bundle, config):

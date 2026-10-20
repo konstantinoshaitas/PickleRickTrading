@@ -7,10 +7,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-PAIRS = ("EURUSD", "AUDUSD", "NZDUSD", "EURAUD", "EURNZD", "AUDNZD")
-LEGS = {"EURUSD": ("6E",), "AUDUSD": ("6A",), "NZDUSD": ("6N",),
-        "EURAUD": ("6E", "6A"), "EURNZD": ("6E", "6N"), "AUDNZD": ("6A", "6N")}
-PIP = dict.fromkeys(PAIRS, 0.0001)  # All six are quote-currency units per base unit.
+from .products import LEGS, PIP, SUPPORTED_PAIRS  # noqa: F401 - existing import surface
+
 TIR_COMMIT = "d77ea849b450b5a2ab8c940694d6a82affe5e1b9"
 NS = 1_000_000_000
 
@@ -31,13 +29,17 @@ def completed_months(today=None):
 class Config:
     start: str = ""
     end: str = ""
-    pairs: tuple = PAIRS
+    pairs: tuple = SUPPORTED_PAIRS
     providers: tuple = ("Broadway", "ICMLD")
     stage: str = "baseline"
     latency_ms: float = 100.0
-    stale_ms: float = 2000.0
+    stale_ms: float = 2000.0  # executable broker quotes; independent of CME references
+    frozen_max_age_s: float = 2.0  # age at close, NOT elapsed age through the closure
+    indicative_max_age_s: float = 2.0  # unchanged resting book since pre-open
+    indicative_crossed_mid: bool = False  # combine per-leg mids, including crossed books
     persistence_ms: float = 1000.0
-    quantity: float = 1000.0
+    notional_usd: float = 100000.0  # fixed allocation per independent trade, no pair priority
+    quantity: float | None = None  # legacy fixed base units, only for reproducing the old pilot
     cash: float = 100000.0
     commission_bps: float | None = None
     slippage_bps: float = 0.0
@@ -57,26 +59,30 @@ class Config:
         a, b = pd.Timestamp(self.start), pd.Timestamp(self.end)
         if a.tzinfo is not None or b.tzinfo is not None or a != a.normalize() or b != b.normalize():
             raise ValueError("dates must be midnight YYYY-MM-DD, interpreted as UTC")
-        if a >= b or (b-a).days > 100:
-            raise ValueError("require start < end and a bounded range of at most 100 days")
-        if not self.pairs or not set(self.pairs) <= set(PAIRS) or len(set(self.pairs)) != len(self.pairs):
+        if a >= b or (b-a).days > 366:
+            raise ValueError("require start < end and a bounded range of at most 366 days")
+        if not self.pairs or not set(self.pairs) <= set(SUPPORTED_PAIRS) or len(set(self.pairs)) != len(self.pairs):
             raise ValueError("choose unique supported pairs")
         if not self.providers or not set(self.providers) <= {"Broadway", "ICMLD", "Finalto"}:
             raise ValueError("choose Broadway, ICMLD or Finalto")
         if self.stage not in {"baseline", "scale", "confirm", "exits"}:
             raise ValueError("stage must be baseline, scale, confirm or exits")
-        for key in ("latency_ms", "slippage_bps", "roll_buffer_days", "commission_bps", "financing_quote"):
+        for key in ("latency_ms", "slippage_bps", "roll_buffer_days", "commission_bps", "financing_quote", "quantity"):
             value = getattr(self, key)
             if value is not None and (isinstance(value, bool) or not math.isfinite(value) or value < 0):
                 raise ValueError(f"{key} must be finite and nonnegative")
-        for key in ("stale_ms", "persistence_ms", "quantity", "cash", "exit_wait_s", "max_hold_s"):
+        for key in ("stale_ms", "frozen_max_age_s", "indicative_max_age_s", "persistence_ms",
+                    "notional_usd", "cash", "exit_wait_s", "max_hold_s"):
             value = getattr(self, key)
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{key} must be finite and positive")
+        if self.quantity == 0:
+            raise ValueError("quantity must be positive or null (USD-notional sizing)")
         if self.min_basis_samples < 2 or not isinstance(self.min_basis_samples, int):
             raise ValueError("min_basis_samples must be an integer >= 2")
-        if type(self.allow_calendar_fallback) is not bool:
-            raise ValueError("allow_calendar_fallback must be boolean")
+        for key in ("allow_calendar_fallback", "indicative_crossed_mid"):
+            if type(getattr(self, key)) is not bool:
+                raise ValueError(f"{key} must be boolean")
 
     def dump(self):
         return asdict(self)

@@ -1,6 +1,7 @@
 """Thin installed tir_data adapters. No network calls happen on import."""
 import json
 import math
+import re
 import tomllib
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from ..config import NS, TIR_COMMIT, ns
+from ..products import ROOTS, broker_pairs
 from .storage import digest, write_json
 
 SCHEMAS = ("definition", "status", "mbp-1", "trades")
@@ -31,19 +33,26 @@ def session_windows(calendar, start, end, pad_ns=NS):
 
 
 def requests(start, end, symbols, stype="parent", windows=None):
-    """Definitions/status/trades cover the whole range; mbp-1 covers the declared session windows only."""
+    """At most 366 days; every provider request is <=90 days, without changing schemas/contracts."""
     from tir_data.databento import Request
     a, b = ns(start), ns(end)
-    if a >= b or b-a > 100*86400*NS:
-        raise ValueError("request requires 0 < range <= 100 days")
+    if a >= b or b-a > 366*86400*NS:
+        raise ValueError("request requires 0 < range <= 366 days")
     if stype not in {"parent", "raw_symbol"}:
         raise ValueError("only parent or explicit raw_symbol requests are supported")
-    if not symbols or len(symbols) > 12 or any(not s.startswith(("6E", "6A", "6N")) for s in symbols):
-        raise ValueError("request needs at most 12 6E/6A/6N symbols")
+    pattern = r"(6[EBANCSJ])" + (r"\.FUT" if stype == "parent" else r"[FGHJKMNQUVXZ]\d{1,2}")
+    if (not symbols or len(symbols) > 12 or len(set(symbols)) != len(symbols) or
+            any(not re.fullmatch(pattern, s) or s[:2] not in ROOTS for s in symbols)):
+        raise ValueError("request needs at most 12 unique supported CME outright/parent symbols")
+    if windows is not None and (not windows or any(not a <= lo < hi <= b for lo, hi in windows)):
+        raise ValueError("quote windows must be nonempty and contained in request bounds")
     batch = []
+    step = 90*86400*NS
     for schema in SCHEMAS:
         spans = windows if (windows and schema == "mbp-1") else [[a, b]]
-        batch += [Request("GLBX.MDP3", schema, symbols, stype, lo, hi) for lo, hi in spans]
+        for lo, hi in spans:
+            batch += [Request("GLBX.MDP3", schema, symbols, stype, t, min(t+step, hi))
+                      for t in range(lo, hi, step)]
     return batch
 
 
@@ -141,8 +150,9 @@ def broker_export(connection, start, end, pairs, providers, output, row_limit=20
     windows instead of every hour of [start, end)."""
     from .storage import seal
     a, b = ns(start), ns(end)
-    if not (0 < b-a <= 100*86400*NS) or not (1 <= row_limit <= 1000000):
+    if not (0 < b-a <= 366*86400*NS) or not (1 <= row_limit <= 1000000):
         raise ValueError("bounded dates and row limit 1..1000000 required")
+    pairs = broker_pairs(pairs)
     mapping = connection.query_df(
         "SELECT symbol_id, symbol_name FROM ICMarkets_Risk.symbols "
         "WHERE has({pairs:Array(String)}, symbol_name)", {"pairs": list(pairs)},

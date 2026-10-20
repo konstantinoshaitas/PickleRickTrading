@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..config import LEGS, NS, PAIRS, ns
+from ..config import NS, PIP, ns
 from ..data_access.storage import TABLES, seal
 from ..market_data.contracts import chicago_ns
+from ..products import PRODUCTS, broker_pairs
 
 
 def make_bundle(directory, config):
@@ -14,7 +15,8 @@ def make_bundle(directory, config):
     days = pd.date_range(config.start, config.end, inclusive="left", freq="D")
     # Four weeks/month, each with one Sunday and one weekday. Tiny synthetic event clock.
     days = [d for d in days if d.dayofweek in (0, 6) and d.day <= 21]
-    roots = {"6E": (1001, 1.1), "6A": (1002, 0.7), "6N": (1003, 0.6)}
+    prices = {"EUR": 1.1, "GBP": 1.3, "AUD": .7, "NZD": .6, "CAD": .72, "CHF": 1.2, "JPY": .0065}
+    roots = {p[0]: (1001+i, prices[c]) for i, (c, p) in enumerate(PRODUCTS.items()) if p}
     known = ns(config.start+"T00:00:00Z") - 20*86400*NS
     expiry = ns(config.end+"T00:00:00Z") + 100*86400*NS
     definitions = [{"root": root, "raw_symbol": root+"_SYNTHETIC", "instrument_id": iid,
@@ -49,13 +51,12 @@ def make_bundle(directory, config):
                                "ask": price+0.00001, "bid_size": 1000000, "ask_size": 1000000,
                                "bid_recv_ns": stamp, "ask_recv_ns": stamp,
                                "indicative_flags": 0, "disabled_flags": 0})
-        for pair in PAIRS:
-            legs = LEGS[pair]
-            fair = roots[legs[0]][1] if len(legs) == 1 else roots[legs[0]][1]/roots[legs[1]][1]
+        for pair in broker_pairs(config.pairs):
+            fair = prices.get(pair[:3], 1)/prices.get(pair[3:], 1)
             for provider in config.providers:
                 for stamp in basis_times+event_times:
-                    displacement = 0.008*(-1 if number % 2 == 0 else 1) if preopen <= stamp < reopening else 0
-                    mid = fair+0.0002+displacement
+                    displacement = 80*PIP[pair]*(-1 if number % 2 == 0 else 1) if preopen <= stamp < reopening else 0
+                    mid = fair+2*PIP[pair]+displacement
                     quotes.append({"venue": "broker", "provider": provider, "pair": pair, "instrument_id": 0,
                                    "recv_ns": stamp, "event_ns": stamp, "bid": mid-0.00005,
                                    "ask": mid+0.00005, "bid_size": 1000000, "ask_size": 1000000,

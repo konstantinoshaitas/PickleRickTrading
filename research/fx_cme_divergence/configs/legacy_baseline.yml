@@ -1,0 +1,8 @@
+# Exact old six-pair / 1,000-base-unit experiment. Keep for comparison, not the new USD sizing.
+pairs: [EURUSD, AUDUSD, NZDUSD, EURAUD, EURNZD, AUDNZD]
+providers: [Broadway, ICMLD]
+quantity: 1000
+stale_ms: 2000
+frozen_max_age_s: 2
+indicative_max_age_s: 2
+indicative_crossed_mid: false
