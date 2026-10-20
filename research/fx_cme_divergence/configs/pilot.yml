@@ -1,11 +1,19 @@
 # Dates omitted: resolve last three COMPLETED calendar months at execution.
-pairs: [EURUSD, AUDUSD, NZDUSD, EURAUD, EURNZD, AUDNZD]
+# All 28 actual broker pair spellings; no pair priority. Also includes USD conversion pairs.
+pairs: [EURGBP, EURAUD, EURNZD, EURUSD, EURCAD, EURCHF, EURJPY,
+        GBPAUD, GBPNZD, GBPUSD, GBPCAD, GBPCHF, GBPJPY,
+        AUDNZD, AUDUSD, AUDCAD, AUDCHF, AUDJPY,
+        NZDUSD, NZDCAD, NZDCHF, NZDJPY, USDCAD, USDCHF, USDJPY, CADCHF, CADJPY, CHFJPY]
 providers: [Broadway, ICMLD]
 stage: baseline
 latency_ms: 100
-stale_ms: 2000
+stale_ms: 2000  # broker freshness only
+frozen_max_age_s: 2  # legacy reference gates; opt in to resting_mid.yml separately
+indicative_max_age_s: 2
+indicative_crossed_mid: false
 persistence_ms: 1000
-quantity: 1000
+notional_usd: 100000
+quantity: null  # set only to reproduce the old fixed-base-unit experiment
 cash: 100000
 commission_bps: null  # Unknown, not an assertion of zero fees.
 financing_quote: null

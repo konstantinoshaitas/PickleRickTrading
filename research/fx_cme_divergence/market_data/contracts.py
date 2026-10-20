@@ -57,6 +57,8 @@ def session_times(row, status, allow_fallback, synthetic=False):
     events = status[(status.session_id == row.session_id) & (status.root == row.root)]
     verified = False
     if not events.empty:
+        if "unexpected_transition" in set(events.phase):
+            raise ValueError("CME closed, paused or traded during preopen; resting reference cannot be verified")
         if set(events.phase) != {"close", "preopen", "reopen"} or events.phase.duplicated().any():
             raise ValueError("incomplete or ambiguous status transitions")
         if (events.recv_ns < events.event_ns).any():

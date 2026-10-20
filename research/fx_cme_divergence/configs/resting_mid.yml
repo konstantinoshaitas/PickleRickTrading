@@ -1,0 +1,9 @@
+# Explicit sensitivity, NOT a fitted winner or a promise of executable CME prices.
+# FROZEN: last trade at most five minutes before close; no age limit DURING the closure.
+frozen_max_age_s: 300
+# INDICATIVE: resting pre-open book, at most one hour since its last update.
+indicative_max_age_s: 3600
+# Combine each leg's (bid+ask)/2. Crossed books are meaningful indications, not executable quotes.
+indicative_crossed_mid: true
+# Broker is what we trade: both sides must still be fresh and unflagged.
+notional_usd: 100000

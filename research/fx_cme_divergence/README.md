@@ -1,131 +1,180 @@
-# FX broker vs CME futures divergence pilot
+# FX broker vs CME: two reference rules
 
-Auditable, script-only research (no notebooks, no custom simulator, no orders). Question: when CME FX
-futures are closed (Sunday pre-open, weekday maintenance halt), does an LP's FX quote dislocate from the
-frozen exchange reference and converge before or after CME reopens?
+Python scripts and CLI only; stock `vectorbt` 0.28.1 accounting; no orders, notebooks or paid data.
 
-Pairs: EURUSD AUDUSD NZDUSD EURAUD EURNZD AUDNZD (futures 6E / 6A / 6N). Default window: the last three
-*completed* calendar months, resolved and recorded at run time. Accounting is stock `vectorbt` 0.28.1
-`Portfolio.from_orders`; `tir_data` (pinned) supplies Databento cost/fetch and read-only ClickHouse.
+* **FROZEN:** take the last CME trade received before the previous session closed. Buy at the broker ask
+  if it is sufficiently below the reference; sell at the broker bid if sufficiently above it.
+* **INDICATIVE:** compare the broker's executable side with the CME pre-open indication. With
+  `indicative_crossed_mid: true`, use each futures leg's `(bid + ask) / 2`, then combine the leg mids.
+  Pre-open books can cross because matching has not started. Their mid is an indication, **not a CME fill**.
 
-**Status:** tooling + offline tests + synthetic smoke only. No empirical result is claimed anywhere. Anything
-printed from `demo` is labelled SYNTHETIC.
+Both references carry the median broker–CME basis measured before close. Sunday carries Friday's basis;
+raw and adjusted residuals are retained. CME catching up at reopen is **not** broker convergence.
+The EURAUD 18 October check found that increasing reference age alone recovered no INDICATIVE signal;
+allowing crossed per-leg mids did. That is a sensitivity, not evidence of robust alpha.
 
-## Install (isolated env; never global)
+## Pairs, units and historical contracts
+
+All **28** conventional pairs among EUR, GBP, AUD, NZD, CAD, CHF, JPY and USD were verified in
+`ICMarkets_Risk.symbols` on 2026-10-20. No pair was dropped. The spellings and product terms are in
+[`products.py`](products.py); `broker-fetch` rechecks the mapping, adding USD conversion pairs when needed.
+`--pairs all` is the default; comma-separated subsets also work. There is **no pair priority**.
+
+All seven futures quote **USD per foreign currency unit**:
+
+| Root | Currency | Units / contract | Outright tick (USD / unit) | Tick USD | Last trade before third Wednesday |
+| --- | --- | ---: | ---: | ---: | --- |
+| 6E | EUR | 125,000 | .00005 | 6.25 | 2 business days, 09:16 CT |
+| 6B | GBP | 62,500 | .0001 | 6.25 | 2 business days, 09:16 CT |
+| 6A | AUD | 100,000 | .00005 | 5 | 2 business days, 09:16 CT |
+| 6N | NZD | 100,000 | .00005 | 5 | 2 business days, 09:16 CT |
+| 6C | CAD | 100,000 | .00005 | 5 | **1** business day, 09:16 CT |
+| 6S | CHF | 125,000 | .00005 | 6.25 | 2 business days, 09:16 CT |
+| 6J | JPY | 12,500,000 | .0000005 | 6.25 | 2 business days, 09:16 CT |
+
+Official CME `/markets/fx/g10/<product>/specs` URLs are recorded in `products.py`, retrieved 2026-10-20.
+USDCAD/USDCHF/USDJPY invert the corresponding future: bid = `1 / ask`, ask = `1 / bid`; available size
+also changes base currency. Other crosses use `num.bid / den.ask`, `num.ask / den.bid`. Pip = .01 for
+JPY-quoted pairs, .0001 otherwise. INDICATIVE mid mode uses **ratio of leg mids**, not mid of a crossed ratio.
+
+**No current-contract shortcut.** Per root/session, choose the unexpired outright outside the roll buffer,
+known by close, with greatest volume in the latest complete prior session available by close. Synthetic
+legs must share a tenor. `outputs/audits/contracts.csv` records symbols, IDs, definition knowledge, expiry,
+last trade, cutoff, prior volume and roll flags. No back-adjustment. This code-first delivery has **not**
+validated the June/September rolls on new real data; inspect that audit before interpreting results.
+
+## Reference settings and sizing
+
+`--config` is a strict YAML mapping; resolved settings are saved with prepared data/results.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `frozen_max_age_s` | 2 | Maximum last-trade age **at close**, not its age throughout the closure |
+| `indicative_max_age_s` | 2 | Safety cap on time since a pre-open book update; separate from broker age |
+| `indicative_crossed_mid` | false | Opt in to crossed per-leg mids instead of legacy bid/ask reference bounds |
+| `stale_ms` | 2000 | Broker freshness, fill wait and persistence continuity; **never loosened by reference options** |
+| `notional_usd` | 100000 | Fixed USD allocation **per trade** |
+
+Profiles: `configs/pilot.yml` = all pairs, USD 100k, conservative legacy reference gates;
+`configs/resting_mid.yml` = all pairs, USD 100k, FROZEN 300 s / INDICATIVE 3600 s / crossed mids ON;
+`configs/legacy_baseline.yml` = original six pairs, 1,000 base units, 2 s reference gates. The last profile
+keeps the original result comparable. The new mid profile is explicitly opt-in, not a fitted winner.
+To isolate age versus crossed-mid effects, copy the small profile outside git and change **one** value.
+
+A resting reference must have been received **and generated** since pre-open began. It is not carried
+past reopening. An unexpected close/pause/trading transition during pre-open rejects the session.
+Missing/nonpositive prices, flags and invalid sizes still reject it. Locked reference books were already
+allowed by the legacy implementation. Broker books must remain uncrossed, unlocked, fresh on **both**
+sides and unflagged: a fresh ask does not override a disabled row. Rejection labels now distinguish age,
+future receive time, missing timestamps, crossed books and ended pre-open phases.
+
+USD sizing uses the same provider's causal base/USD ask for buys and bid for sells at entry. Missing fresh
+conversion or insufficient broker size makes entry unfillable. P&L converts quote currency at exit (bid
+for gains, ask for liabilities), including reciprocal CAD/CHF/JPY conversions. `quantity` is only a legacy
+fixed-base-unit override. All trades use independent, fully funded quote-currency vectorbt accounts:
+**no shared capital limit, leverage, netting or preference between pairs**. This is an all-pairs realized
+P&L analysis, not a margin/capital-constrained portfolio simulator.
+
+## Install and credentials
 
 ```bash
-python3.12 -m venv .venv && .venv/bin/pip install -e '.[test]'   # from the repository root
+python3.12 -m venv .venv
+.venv/bin/pip install -e '.[test]'
 ```
 
-`tir-tools` is a pinned Git dependency (`ICMarkets/TIR_Tools` @ `d77ea84…`, see `pyproject.toml`); the install
-needs your normal work GitHub auth. Nothing imports a sibling checkout or edits `sys.path`.
+The pinned private `ICMarkets/TIR_Tools` dependency needs work GitHub auth. Credentials stay outside git
+and are read only through explicit flags: `--env-file ~/.config/tir-data/databento.env` and
+`--creds-file ~/.config/ch-axi/creds.toml`. Nothing imports a sibling checkout or installs globally.
+No-argument invocation identifies the CLI; every command has `--help`; unknown flags fail, no prompts.
 
-Credentials stay outside the repo and are only read when you pass the file explicitly:
+## Reproduce the resolved 180-day run (market-data download is YOUR step)
 
-| Need | File (explicit flag) | Content |
-| --- | --- | --- |
-| Databento | `--env-file ~/.config/tir-data/databento.env` | `DATABENTO_API_KEY=…` |
-| ClickHouse | `--creds-file ~/.config/ch-axi/creds.toml` | `[prod]` url/username/password (reused, never copied) |
-
-Invoke from any directory: `python -m research.fx_cme_divergence <command>` (`--help` per command; output is
-flat `key: value`, errors are `error:` + exit 1/2, unknown flags exit 2, no prompts).
-`--workspace` relocates `data/` and `outputs/` (default: this directory, git-ignored).
-
-## Workflow
-
-| Step | Command | Network |
-| --- | --- | --- |
-| 0 | `demo` – deterministic synthetic bundle | none |
-| 1 | `estimate` – free metadata cost of all four schemas | metadata only |
-| 2 | `fetch` – download iff **every** estimate is exactly USD 0 | Databento |
-| 3 | `broker-fetch` – bounded hourly read-only LP top-of-book export | ClickHouse |
-| 4 | `normalize` – DBN + LP → sealed bundle (needs official calendar + contract terms) | none |
-| 5 | `audit` – per-session contract/session audit **first** (`outputs/audits/contracts.csv`) | none |
-| 6 | `prepare` – causal basis, references, quote validity, coverage | none |
-| 7 | `backtest --stage baseline` – prints the candidate count, then vectorbt | none |
-| 8 | `report` – summary CSV, chart, static HTML | none |
-
-Tunables without a flag (latency, staleness, quantity, cash, persistence, hold, exit wait, roll buffer, minimum
-basis samples) live in `--config configs/pilot.yml`; strict keys, no credentials, CLI flags override, the resolved
-config is written next to results.
-
-Smoke (offline): `demo → audit → prepare → backtest → report` with `--start 2026-07-01 --end 2026-08-01`.
-
-Real run sketch (all paths are yours; start with `estimate`):
+Resolved on **2026-10-20 UTC**: **2026-04-23 inclusive .. 2026-10-20 exclusive**, ending yesterday.
+Definitions/status/trades begin Apr 19 for prior complete-session volume. The code bounds the overall
+range to 366 days and splits provider requests at 90 days. MBP-1 uses merged basis-to-reopen session
+windows; contract/schema quality is not reduced. ClickHouse reads are read-only, hour-chunked, row/time
+limited and refuse saturation rather than silently truncate. Broadway is exported before ICMLD.
 
 ```bash
-M="python -m research.fx_cme_divergence"
-$M estimate --env-file ~/.config/tir-data/databento.env --calendar cal.csv \
-    --request-start 2026-06-29T00:00:00Z --request-end 2026-10-01T00:00:00Z
-$M fetch    --env-file ~/.config/tir-data/databento.env --calendar cal.csv \
-    --request-start 2026-06-29T00:00:00Z --request-end 2026-10-01T00:00:00Z
-$M broker-fetch --creds-file ~/.config/ch-axi/creds.toml --providers Broadway,ICMLD --calendar cal.csv \
-    --start <window start minus 2 days>   # session windows only; reaches the Friday basis of a first Sunday
-$M normalize --downloads outputs/audits/downloads.json --broker-chunks data/raw/broker \
-    --calendar cal.csv --contract-terms terms.csv --broker-size-units sizes.json
-$M audit && $M prepare && $M backtest --stage baseline && $M report --stage baseline
+PY=.venv/bin/python
+W=/absolute/path/outside/git/fx-180d
+C=research/fx_cme_divergence/configs/pilot.yml
+COMMON=(--workspace "$W" --start 2026-04-23 --end 2026-10-20 --pairs all)
+M=research.fx_cme_divergence
+$PY -m $M official-inputs "${COMMON[@]}"
+I="$W/data/official"
+REQUEST=("${COMMON[@]}" --calendar "$I/calendar.csv" \
+  --request-start 2026-04-19T00:00:00Z --request-end 2026-10-20T00:00:00Z \
+  --env-file ~/.config/tir-data/databento.env --max-bytes 5000000000)
+$PY -m $M estimate "${REQUEST[@]}"     # inspect EVERY estimate in outputs/audits/cost.json
+$PY -m $M fetch "${REQUEST[@]}"        # fresh estimates + exact USD 0 gate again
+$PY -m $M official-inputs "${COMMON[@]}" --downloads "$W/outputs/audits/downloads.json"
+$PY -m $M broker-fetch "${COMMON[@]}" --calendar "$I/calendar.csv" \
+  --providers Broadway,ICMLD --creds-file ~/.config/ch-axi/creds.toml
+# Supply sizes.json yourself: explicit LP size-unit multipliers for every exported pair.
+$PY -m $M normalize "${COMMON[@]}" --downloads "$W/outputs/audits/downloads.json" \
+  --broker-chunks "$W/data/raw/broker" --calendar "$I/calendar.csv" \
+  --contract-terms "$I/terms.csv" --broker-size-units /absolute/path/sizes.json
+$PY -m $M audit "${COMMON[@]}" --config "$C"
+$PY -m $M prepare "${COMMON[@]}" --config "$C"
+$PY -m $M backtest "${COMMON[@]}" --config "$C" --stage baseline
+$PY -m $M report "${COMMON[@]}" --stage baseline
 ```
 
-`--request-start` should precede `--start` by ≥2 days so prior complete-session volume exists for the first
-selection; sessions without it are rejected in the audit, not guessed.
+Compare the opt-in rule without fetching again or overwriting the baseline:
 
-## Financial safety
+```bash
+V="$W/resting-mid"
+ALT=research/fx_cme_divergence/configs/resting_mid.yml
+$PY -m $M prepare --workspace "$V" --inputs "$W/data/inputs/bundle" \
+  --start 2026-04-23 --end 2026-10-20 --config "$ALT"
+$PY -m $M backtest --workspace "$V" --start 2026-04-23 --end 2026-10-20 --config "$ALT"
+$PY -m $M report --workspace "$V"
+```
 
-* Authority is **USD 0**. `fetch` first obtains fresh metadata cost for *every* request (definition, status,
-  mbp-1, trades, every window); any positive, NaN, missing or failed estimate stops before the downloader. A positive
-  `--max-cost` is a usage error. `tir_data`'s own `max_cost=0.0` gate still runs. `--max-bytes` (default 5 GB)
-  additionally refuses very large zero-cost pulls.
-* Cache reuse needs a matching `*.research.json` receipt (request, sha256, cost 0, pinned commit); foreign or
-  edited cache files are refused. Manifests are secret-free.
-* Observed 2026-10-20 (metadata only, nothing downloaded): the account's estimate for 6E/6A/6N
-  `definition`/`status`/`mbp-1`/`trades` over 2026-07-01→10-01 was USD 0.00 for every schema, with 18.2 GB
-  billable `mbp-1`. A zero estimate means no charge is projected; confirm on the Databento billing page that this
-  reflects an included plan, not credits. Use `--calendar` so `mbp-1` covers only session windows.
+`official-inputs` uses bundled **public schedule facts**, not downloaded prices. All seven schedules
+were identical. It includes holiday early closes and records incomplete cycles in `calendar_exclusions.csv`:
+May 25 / Sep 7 lacked a new close; Jun 20 / Jul 4 had Saturday 05:00 opens without pre-open. Those opens
+are excluded, not guessed. The official Saturday 17:00 closes are retained for the following Sundays;
+**status must confirm them**. Do not enable calendar fallback to force those questionable sessions through.
+The bundled calendar covers only this resolved window; a later window requires newly sourced inputs.
+`terms.csv` is generated offline from your receipted historical definitions, checking each root's CME rule.
+Business-day exceptions that disagree are listed in `terms_exclusions.csv`, never silently assigned dates.
 
-## Protocol (what the code enforces)
+`fetch` refuses any positive, NaN, failed or missing estimate, or totals above `--max-bytes`. No credit use
+is authorized; a zero estimate projects no charge, not proof of how the account is billed. If the cap binds,
+use smaller dated batches/workspaces with the **same** parents/schemas/session windows; do not increase paid
+cost authority. Raw cache reuse requires matching request/hash/zero-cost receipts. All real files stay outside git.
 
-* **Contracts first.** Per session and root: definitions known by the close (`known_ns ≤ cutoff`), unexpired and
-  outside `roll_buffer_days`, ranked by the volume of the **latest complete prior session published before the
-  cutoff**. Expiry is never "front month". Raw symbol, instrument id, expiry, last-trade, cutoff, volume
-  evidence and roll flag are in the audit. Synthetic legs must share a tenor. Back-adjusted prices are never used.
-* **Sessions.** Official CME schedule rows (source URL + version required) in America/Chicago converted to UTC;
-  DST tests included. Status events (close/pre-open/reopen) override calendar times; without status the
-  session is rejected unless `--allow-calendar-fallback` (marked `status_verified=False`).
-* **Four arms, never pooled:** Sunday/weekday × frozen last-tradable CME trade / indicative pre-open book.
-  Frozen CME is a stale reference, not truth; CME catching up at reopen is not broker convergence. Locked or
-  crossed books are shown as indicative only and the broker is the only traded side.
-* **Basis.** Median broker–futures mid difference over a pre-closure window, frozen through the closure. Raw and
-  adjusted residuals are both kept; Sunday sessions carry stale Friday basis (flagged).
-* **Crosses.** bid = num.bid / den.ask, ask = num.ask / den.bid; size limited by both legs; futures size is in
-  currency units (125 000 / 100 000 per contract). Pip = 0.0001 for all six pairs.
-* **Causality.** UTC ns throughout; receive vs event time kept; backward-only as-of; per-side broker quote age;
-  rejects flags, crossed/locked, missing, stale, thin quotes (reasons in coverage).
-* **Fills.** Long enters ask / exits bid; short enters bid / exits ask; entry ≥ latency after signal; baseline exit
-  first valid quote ≥ reopen + 2 min (and not before the reopen message was received) within `exit_wait_s`.
-  Missing exits are `unpriced_open`, never zero P&L.
-* **Candidates (small, staged, printed before running):** baseline 3 (10/20/40 pips), scale 4 (1/2 bp, 2/3× pre-window
-  vol, spread-relative eligibility), confirm 2 (immediate vs persistence), exits 4 (60 s / 300 s fixed, half / full
-  convergence with adverse stop). Weeks are assigned 60/20/20 train/validation/test chronologically; nothing is
-  tuned on validation/test and no ensemble is fitted.
+## What backtest prints and writes
 
-## Engine assumptions (vectorbt)
+`ledger.csv` includes every candidate/session outcome; `trades.csv` includes filled entries, including
+unpriced open positions. The CLI prints a readable TOON trade table with pair/provider/reference, dates,
+signal/entry/exit UTC and Chicago times, side, broker prices, base quantity, USD notional, pips, gross USD,
+costs, scenario net USD, cost label, exit reason and hold time. Raw integer ns remain in CSV for audit.
+`engine_entry_price`/`engine_exit_price` additionally include any explicitly assumed slippage.
 
-Each roundtrip is its own `Portfolio.from_orders` (`cash_sharing=False`, `init_cash` in quote currency,
-`direction="both"`, size in base units, `allow_partial=False`), so configurations never share capital or net
-positions. Commission → vectorbt `fees`, slippage → `slippage`, financing → exit `fixed_fees`. No margin or leverage
-model; P&L is in quote currency and converted to USD with the same LP's contemporaneous USD pair (bid for gains,
-ask for losses); an unpriced conversion marks the row. Unknown commission/financing ⇒ `gross_provisional_unknown_costs`.
+`portfolio.csv` combines **all pairs**, separately for each candidate × provider × Sunday/weekday reference
+arm; `by_pair.csv`, `by_week.csv`, `by_month.csv` give the corresponding breakdowns. Providers/reference
+rules/parameter alternatives are not pooled into fictitious extra independent trades. Summaries include
+signals, unfillable/open/unpriced counts, win rate on priced closes, average pips, average/worst USD trade,
+and maximum drawdown of **realized cumulative P&L by exit time**, netting simultaneous exits. They are
+not mark-to-market drawdowns. Missing USD valuations suppress totals/curves rather than becoming zeros.
+`rejections.csv`, contract/coverage audits and `quote_gates.csv` retain why signals or observations failed.
+`report` writes static HTML, the single-pair diagnostic chart and the all-pairs cumulative P&L chart.
 
-## Limitations / not yet done
+Spread is paid by bid/ask fills. Commission/financing default to **unknown**, not asserted zero; results
+remain `gross_provisional_unknown_costs`. Only pass measured or clearly labelled assumed costs via
+`--commission-bps`, `--slippage-bps`, `--financing-quote`; the ledger records them. No invented cost scenario
+is a default. Baseline entries are 10/20/40 pips, exits reopen + 2 min (actual status time/receive availability).
+The small separate stages remain `scale` (4), `confirm` (2), `exits` (4); run them only if counts justify it.
+Weeks stay whole in chronological 60/20/20 train/validation/test splits. No tuning or robust-alpha claim.
 
-* Real run needs two small hand-authored official inputs: the session calendar CSV (columns of `sessions.csv`,
-  from <https://www.cmegroup.com/trading-hours.html> and its holiday schedule) and contract terms
-  (`root,raw_symbol,last_trade_ns,tenor,calendar_source`). The tool refuses unsourced ones.
-* Status action codes (`CLOSE`=12, `PRE_OPEN`=1, `TRADING`=7) matched the official schedule to the second on every
-  session-product of a 30-day real sample (2026-09-19..10-19); `PAUSE` never occurred. Ambiguous transitions still leave
-  a session unverified: inspect the audit before trusting a session.
-* Broker `size` is a constant 100000.00 on every LP row of that sample (a nominal, not depth), read as base-currency
-  units (`{"EURUSD": 1, …}`); `--broker-size-units` stays mandatory, not guessed.
-* LP data are not Capital.com/Exness customer quotes; Broadway is the intended provider, ICMLD provisional.
-* ~13 Sundays per quarter: pilot only, correlated crosses/providers, no robust-alpha claim.
-* Depth (MBP-10) is not implemented; top-of-book only.
+## Limits
+
+* LP size was a constant nominal 100,000 in the old six-pair pilot, not verified firm depth. New pair size
+  units need your explicit input. USD 100k can exceed that nominal size, legitimately rejecting entries.
+* No new 180-day market data were fetched for this code-first delivery. Estimates are not a performance test;
+  normalization/preparation still use pandas in memory, with CSV expansion and peak RAM not benchmarked.
+* Crosses and the two similar providers are highly correlated. Clock offsets between LP and CME hosts were
+  not measured. Depth is a separate, unimplemented variant; top-of-book only, no paid substitute.
