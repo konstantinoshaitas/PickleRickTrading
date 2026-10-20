@@ -58,7 +58,8 @@ validated the June/September rolls on new real data; inspect that audit before i
 Profiles: `configs/pilot.yml` = all pairs, USD 100k, conservative legacy reference gates;
 `configs/resting_mid.yml` = all pairs, USD 100k, FROZEN 300 s / INDICATIVE 3600 s / crossed mids ON;
 `configs/legacy_baseline.yml` = original six pairs, 1,000 base units, 2 s reference gates. The last profile
-keeps the original result comparable. The new mid profile is explicitly opt-in, not a fitted winner.
+keeps the original sizing/reference rules, but now defaults to Broadway only. The new mid profile is explicitly
+opt-in, not a fitted winner.
 To isolate age versus crossed-mid effects, copy the small profile outside git and change **one** value.
 
 A resting reference must have been received **and generated** since pre-open began. It is not carried
@@ -86,14 +87,22 @@ The pinned private `ICMarkets/TIR_Tools` dependency needs work GitHub auth. Cred
 and are read only through explicit flags: `--env-file ~/.config/tir-data/databento.env` and
 `--creds-file ~/.config/ch-axi/creds.toml`. Nothing imports a sibling checkout or installs globally.
 No-argument invocation identifies the CLI; every command has `--help`; unknown flags fail, no prompts.
+Every successful stage ends with `elapsed_s` and `rows` (generated table rows; report counts summary groups).
+Estimate/fetch print `rows: null` because they do not decode raw DBN records; request counts are printed instead.
+Broadway is the only default provider. ICMLD remains available explicitly with `--providers ICMLD`.
 
 ## Reproduce the resolved 180-day run (market-data download is YOUR step)
 
 Resolved on **2026-10-20 UTC**: **2026-04-23 inclusive .. 2026-10-20 exclusive**, ending yesterday.
 Definitions/status/trades begin Apr 19 for prior complete-session volume. The code bounds the overall
 range to 366 days and splits provider requests at 90 days. MBP-1 uses merged basis-to-reopen session
-windows; contract/schema quality is not reduced. ClickHouse reads are read-only, hour-chunked, row/time
-limited and refuse saturation rather than silently truncate. Broadway is exported before ICMLD.
+windows; contract/schema quality is not reduced. ClickHouse reads only Broadway by default. It uses one
+`epoch_hour IN (...)` pruning list covering the basis and pre-open-to-boundary windows, plus exact integer-ns
+ranges in SQL; closed gaps (including the weekend) are skipped. A count-by-hour query plans one data query
+up to **20 million rows and 31 days**; larger requests use at most three row-balanced hour-list slices in parallel,
+each with its own connection and Parquet part. All queries are read-only, with two threads and a 30-minute
+execution/receive timeout. Arrow batches stream directly to Parquet; there is no full-result DataFrame or CSV.
+Each part and the total must match the count, otherwise no valid manifest is published.
 
 ```bash
 PY=.venv/bin/python
@@ -110,7 +119,7 @@ $PY -m $M estimate "${REQUEST[@]}"     # inspect EVERY estimate in outputs/audit
 $PY -m $M fetch "${REQUEST[@]}"        # fresh estimates + exact USD 0 gate again
 $PY -m $M official-inputs "${COMMON[@]}" --downloads "$W/outputs/audits/downloads.json"
 $PY -m $M broker-fetch "${COMMON[@]}" --calendar "$I/calendar.csv" \
-  --providers Broadway,ICMLD --creds-file ~/.config/ch-axi/creds.toml
+  --creds-file ~/.config/ch-axi/creds.toml
 # Supply sizes.json yourself: explicit LP size-unit multipliers for every exported pair.
 $PY -m $M normalize "${COMMON[@]}" --downloads "$W/outputs/audits/downloads.json" \
   --broker-chunks "$W/data/raw/broker" --calendar "$I/calendar.csv" \
@@ -120,6 +129,13 @@ $PY -m $M prepare "${COMMON[@]}" --config "$C"
 $PY -m $M backtest "${COMMON[@]}" --config "$C" --stage baseline
 $PY -m $M report "${COMMON[@]}" --stage baseline
 ```
+
+Broker parts are `data/raw/broker/Broadway_0.parquet` (and `_1`, `_2` only for larger requests).
+Normalize writes `data/inputs/bundle/{definitions,volumes,sessions,status,quotes,trades}.parquet`, preserving
+integer nanoseconds. Raw Databento `.dbn.zst` files and zero-cost receipts are unchanged. Official calendar,
+contract terms, audits and trade/portfolio result tables remain CSV for spreadsheets.
+**Old CSV bundles are not readable by this version:** rerun `broker-fetch` for old broker CSV exports, then
+rerun `normalize`; there is no CSV fallback. Existing raw Databento caches do not need downloading again.
 
 Compare the opt-in rule without fetching again or overwriting the baseline:
 
@@ -175,6 +191,6 @@ Weeks stay whole in chronological 60/20/20 train/validation/test splits. No tuni
 * LP size was a constant nominal 100,000 in the old six-pair pilot, not verified firm depth. New pair size
   units need your explicit input. USD 100k can exceed that nominal size, legitimately rejecting entries.
 * No new 180-day market data were fetched for this code-first delivery. Estimates are not a performance test;
-  normalization/preparation still use pandas in memory, with CSV expansion and peak RAM not benchmarked.
-* Crosses and the two similar providers are highly correlated. Clock offsets between LP and CME hosts were
+  normalization/preparation still load Parquet into pandas in memory; peak RAM is not benchmarked.
+* Crosses are highly correlated (as are providers if you explicitly select more than Broadway). Clock offsets between LP and CME hosts were
   not measured. Depth is a separate, unimplemented variant; top-of-book only, no paid substitute.

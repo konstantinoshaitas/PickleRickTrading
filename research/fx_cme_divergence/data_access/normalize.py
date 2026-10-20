@@ -12,6 +12,7 @@ from .storage import TABLES, digest, seal, verify
 
 
 def broker_snapshots(frame, provider, contract_sizes):
+    frame = exact_ns(frame, ("time_received",))
     pieces = []
     for pair, rows in frame.groupby("symbol_name"):
         if pair not in contract_sizes or contract_sizes[pair] <= 0:
@@ -151,15 +152,15 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
     broker_manifest = verify(broker_dir)
     chunks = []
     for name in broker_manifest["files"]:
-        provider = name.split("_")[0]
-        chunks.append(broker_snapshots(pd.read_csv(Path(broker_dir)/name), provider,
+        provider = name.split("_")[0].split(".")[0]
+        chunks.append(broker_snapshots(pd.read_parquet(Path(broker_dir)/name), provider,
                                       json.loads(Path(sizes_path).read_text())))
     if not chunks:
         raise ValueError("no broker data chunks")
     columns = ["venue", "provider", "pair", "instrument_id", "recv_ns", "event_ns", "bid", "ask",
                "bid_size", "ask_size", "bid_recv_ns", "ask_recv_ns", "indicative_flags", "disabled_flags"]
     broker = pd.concat(chunks, ignore_index=True)
-    # Chunks have no forward state across boundaries; missing sides remain invalid until both arrive.
+    # Missing sides remain invalid until both arrive; stale carried sides are rejected by preparation.
     tables = {"definitions": definitions, "sessions": sessions,
               "volumes": pd.DataFrame(volumes, columns=["root", "instrument_id", "session_end_ns", "available_ns", "volume"]),
               "status": pd.DataFrame(observed, columns=["session_id", "root", "phase", "event_ns", "recv_ns"]),
@@ -171,8 +172,8 @@ def normalize(downloads_path, broker_dir, calendar_path, terms_path, sizes_path,
         for column in table:
             if column.endswith("_ns") and len(table) and not pd.api.types.is_integer_dtype(table[column]):
                 raise ValueError(f"{name}.{column} lost integer nanosecond precision")
-        table.to_csv(output/f"{name}.csv", index=False)
-    seal(output, [f"{t}.csv" for t in TABLES], {
+        table.to_parquet(output/f"{name}.parquet", index=False)
+    seal(output, [f"{t}.parquet" for t in TABLES], {
         "synthetic": False, "source": "zero-cost Databento and authorized bounded ClickHouse",
         "downloads_hash": digest(downloads_path), "broker_manifest_hash": digest(Path(broker_dir)/"manifest.json"),
         "calendar_hash": digest(calendar_path), "terms_hash": digest(terms_path), "sizes_hash": digest(sizes_path)})

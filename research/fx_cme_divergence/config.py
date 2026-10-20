@@ -30,7 +30,7 @@ class Config:
     start: str = ""
     end: str = ""
     pairs: tuple = SUPPORTED_PAIRS
-    providers: tuple = ("Broadway", "ICMLD")
+    providers: tuple = ("Broadway",)
     stage: str = "baseline"
     latency_ms: float = 100.0
     stale_ms: float = 2000.0  # executable broker quotes; independent of CME references

@@ -3,8 +3,12 @@ import json
 import math
 import re
 import tomllib
+from bisect import bisect_left
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -15,20 +19,26 @@ from .storage import digest, write_json
 SCHEMAS = ("definition", "status", "mbp-1", "trades")
 
 
-def session_windows(calendar, start, end, pad_ns=NS):
-    """Merged [basis_start, boundary) quote windows for official-calendar sessions inside [start, end)."""
+def session_windows(calendar, start, end, pad_ns=NS, split_closed=False):
+    """Merge session windows; broker exports omit the closed interval (including weekends).
+
+    Keep Databento's existing contiguous windows so raw requests/receipts remain unchanged.
+    """
     import pandas as pd
     sessions = pd.read_csv(calendar)
     sessions = sessions[(sessions.reopen_ns >= ns(start)) & (sessions.reopen_ns < ns(end))]
-    spans = sorted({(int(a)-pad_ns, int(b)+pad_ns) for a, b in zip(sessions.basis_start_ns, sessions.boundary_ns)})
+    intervals = [(sessions.basis_start_ns, sessions.boundary_ns)]
+    if split_closed:
+        intervals = [(sessions.basis_start_ns, sessions.basis_end_ns), (sessions.preopen_ns, sessions.boundary_ns)]
+    spans = sorted({(int(a)-pad_ns, int(b)+pad_ns) for starts, ends in intervals for a, b in zip(starts, ends)})
     merged = []
     for a, b in spans:
         if merged and a <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], b)
         else:
             merged.append([a, b])
-    if not merged or len(merged) > 400:
-        raise ValueError("calendar yields no sessions or more than 400 quote windows")
+    if not merged or len(merged) > 800:
+        raise ValueError("calendar yields no sessions or more than 800 quote windows")
     return merged
 
 
@@ -130,6 +140,7 @@ def fetch_zero(provider, batch, audit_path, max_cost=0, max_bytes=5_000_000_000)
 
 def clickhouse(creds_file):
     from tir_data.clickhouse import ClickHouseClient
+    from tir_data.clickhouse.client import make_connection
     from tir_data.config import load_settings
     # Explicit opt-in only; no ambient read of another project's credentials.
     with Path(creds_file).expanduser().open("rb") as stream:
@@ -140,18 +151,65 @@ def clickhouse(creds_file):
     settings = replace(load_settings(environ={}), clickhouse_host=url.hostname,
                        clickhouse_port=url.port or 8443, clickhouse_username=prod["username"],
                        clickhouse_password=prod["password"])
-    return ClickHouseClient.from_settings(settings)
+    return ClickHouseClient(make_connection(settings, send_receive_timeout=1800))
 
 
-def broker_export(connection, start, end, pairs, providers, output, row_limit=200000, windows=None):
-    """One-hour chunks with partition pruning. Refuse saturated chunks, never truncate silently.
+def broker_plan(hour_counts):
+    """One stream up to 20M rows / 31 days; otherwise at most three row-balanced hour slices."""
+    if hour_counts.empty:
+        return [([], 0)]
+    hours = hour_counts.sort_values("epoch_hour")
+    cumulative = hours.rows.cumsum().tolist()
+    total = int(cumulative[-1])
+    span = int(hours.epoch_hour.iloc[-1])-int(hours.epoch_hour.iloc[0])+1
+    parts = min(3, len(hours), max(1, math.ceil(total/20_000_000), math.ceil(span/(31*24))))
+    cuts = [0]
+    for i in range(1, parts):
+        cuts.append(max(cuts[-1]+1, min(len(hours)-(parts-i), bisect_left(cumulative, total*i/parts)+1)))
+    cuts.append(len(hours))
+    return [(hours.epoch_hour.iloc[a:b].astype(int).tolist(), int(hours.rows.iloc[a:b].sum()))
+            for a, b in pairwise(cuts)]
 
-    `windows` ([[lo_ns, hi_ns], ...], e.g. from session_windows) restricts the export to the session quote
-    windows instead of every hour of [start, end)."""
+
+def stream_broker(connection, sql, params, settings, path, expected, connection_factory=None):
+    """Write only bounded Arrow batches; never publish a truncated Parquet part."""
+    import pyarrow.parquet as pq
+
+    temporary = path.with_suffix(".parquet.tmp")
+    rows = 0
+    try:
+        with ExitStack() as stack:
+            if connection_factory is not None:
+                connection = connection_factory()
+                stack.callback(connection.connection.close)
+            stream = stack.enter_context(connection.connection.query_arrow_stream(sql, params, settings=settings,
+                                                                                  use_strings=True))
+            writer = None
+            for batch in stream:
+                if writer is None:
+                    writer = stack.enter_context(pq.ParquetWriter(temporary, batch.schema, compression="zstd"))
+                writer.write_batch(batch)
+                rows += batch.num_rows
+        if rows != expected:
+            raise ValueError(f"broker row count mismatch: expected {expected}, streamed {rows}; export refused")
+        if writer is not None:
+            temporary.replace(path)
+        return rows
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def broker_export(connection, start, end, pairs, providers, output, windows=None, connection_factory=None, on_plan=None):
+    """One count-by-hour query per provider, then 1–3 streamed Parquet parts according to size."""
     from .storage import seal
     a, b = ns(start), ns(end)
-    if not (0 < b-a <= 366*86400*NS) or not (1 <= row_limit <= 1000000):
-        raise ValueError("bounded dates and row limit 1..1000000 required")
+    if not 0 < b-a <= 366*86400*NS:
+        raise ValueError("bounded dates required")
+    if not providers or len(set(providers)) != len(providers) or not set(providers) <= {"Broadway", "ICMLD", "Finalto"}:
+        raise ValueError("choose unique supported providers")
+    spans = sorted({(max(a, lo), min(b, hi)) for lo, hi in (windows or [(a, b)]) if max(a, lo) < min(b, hi)})
+    if not spans or len(spans) > 800:
+        raise ValueError("broker windows are empty or exceed 800 ranges")
     pairs = broker_pairs(pairs)
     mapping = connection.query_df(
         "SELECT symbol_id, symbol_name FROM ICMarkets_Risk.symbols "
@@ -167,32 +225,44 @@ def broker_export(connection, start, end, pairs, providers, output, row_limit=20
         raise ValueError("provider tables not discovered")
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    files, empty = [], 0
-    settings = {"max_execution_time": 30, "max_threads": 2, "max_rows_to_read": 10000000,
-                "max_result_rows": row_limit, "result_overflow_mode": "throw"}
-    spans = [(max(a, lo), min(b, hi)) for lo, hi in (windows or [(a, b)]) if max(a, lo) < min(b, hi)]
-    chunks = [(hour, max(wa, hour*3600*NS), min(wb, (hour+1)*3600*NS)) for wa, wb in spans
-              for hour in range(wa // (3600*NS), (wb-1)//(3600*NS)+1)]
-    if not chunks or len({hour for hour, _, _ in chunks}) != len(chunks):
-        raise ValueError("broker windows are empty or share an hour chunk")
+    (output/"manifest.json").unlink(missing_ok=True)  # A failed rerun must not leave a usable partial bundle.
+    files, counts = [], {}
+    settings = {"readonly": 1, "max_execution_time": 1800, "max_threads": 2,
+                "max_rows_to_read": 0, "max_result_rows": 0, "result_overflow_mode": "throw",
+                "max_block_size": 65536}
+    hours = sorted({hour for lo, hi in spans for hour in range(lo//(3600*NS), (hi-1)//(3600*NS)+1)})
+    params = {"symbol_ids": [int(i) for i in mapping.symbol_id], "names": list(mapping.symbol_name), "hours": hours}
+    ranges = []
+    for i, (lo, hi) in enumerate(spans):
+        params.update({f"lo{i}": lo, f"hi{i}": hi})
+        ranges.append(f"(time_received >= {{lo{i}:UInt64}} AND time_received < {{hi{i}:UInt64}})")
+    source = (" FROM ticks_and_markouts.{table:Identifier} "
+              "PREWHERE core_symbol IN {symbol_ids:Array(UInt32)} AND epoch_hour IN {hours:Array(UInt32)} "
+              "WHERE depth = 0 AND side IN (0, 1) AND (" + " OR ".join(ranges) + ")")
     for lp in providers:
-        for hour, lo, hi in chunks:
-            # tir loader is bounded/readonly, but omits size; use its table/parameters with enriched SQL.
-            from tir_data.sources.lp_quotes import quote_parameters
-            params = quote_parameters(lp, mapping.symbol_id, lo, hi)
-            from importlib.resources import files as resources
-            sql = resources("tir_data.sources").joinpath("sql/lp_quotes_top_of_book.sql").read_text()
-            sql = sql.replace("    disabled_flags\n", "    disabled_flags, size, quote_flags, time_sent\n")
-            frame = connection.query_df(sql + f" LIMIT {row_limit + 1}", params, settings=settings)
-            if len(frame) >= row_limit:
-                raise ValueError("broker chunk at row cap; narrow request, do not use partial export")
-            if frame.empty:  # closed market (weekend, maintenance): no columns come back, nothing to keep
-                empty += 1
-                continue
-            name = f"{lp}_{hour}.csv"
-            frame.merge(mapping, left_on="core_symbol", right_on="symbol_id").to_csv(output/name, index=False)
-            files.append(name)
+        params["table"] = f"quotes_{lp}"
+        hours = connection.query_df("SELECT epoch_hour, count() AS rows" + source + " GROUP BY epoch_hour",
+                                    params, settings=settings)
+        plan = broker_plan(hours)
+        expected = sum(rows for _, rows in plan)
+        if on_plan:
+            on_plan(provider=lp, parts=len(plan), expected_rows=expected)
+        if len(plan) > 1 and connection_factory is None:
+            raise ValueError("parallel broker export requires a separate connection factory")
+        sql = ("SELECT core_symbol, time_received, side, toFloat64(price) AS price, indicative_flags, "
+               "disabled_flags, size, quote_flags, time_sent, "
+               "transform(core_symbol, {symbol_ids:Array(UInt32)}, {names:Array(String)}, '') AS symbol_name" + source)
+        names = [f"{lp}_{i}.parquet" for i in range(len(plan))]
+        with ThreadPoolExecutor(max_workers=len(plan)) as pool:
+            jobs = [pool.submit(stream_broker, connection, sql, {**params, "hours": hours}, settings,
+                                output/name, rows, connection_factory if len(plan) > 1 else None)
+                    for name, (hours, rows) in zip(names, plan)]
+            results = [job.result() for job in jobs]
+        if sum(results) != expected:
+            raise ValueError("broker total row count mismatch; export refused")
+        counts[lp] = expected
+        files.extend(name for name, rows in zip(names, results) if rows)
     seal(output, files, {"source": "read-only ClickHouse LP top of book", "synthetic": False,
                          "start_ns": a, "end_ns": b, "pairs": list(pairs), "providers": list(providers),
-                         "empty_chunks": empty})
-    return len(files)
+                         "rows": counts, "windows": spans})
+    return sum(counts.values())
