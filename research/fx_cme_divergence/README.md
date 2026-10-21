@@ -78,8 +78,10 @@ validated the June/September rolls on new real data; inspect that audit before i
 | `notional_usd` | 100000 | Fixed USD allocation **per trade** |
 
 Profiles: `configs/pilot.yml` = all pairs, USD 100k, the relaxed defaults above;
-`configs/strict_gates.yml` = all pairs, USD 100k, the old behaviour (both broker sides 2 s, flags and size
-rules, whole-row 2 s, FROZEN/INDICATIVE 2 s, crossed books rejected) for comparison;
+`configs/strict_gates.yml` = all pairs, USD 100k, the old gate values (both broker sides 2 s, flags and size
+rules, whole-row 2 s, FROZEN/INDICATIVE 2 s, crossed books rejected) for comparison; it restores the old
+signal set, not the old fill model, because entry/exit use the quote in force and basis/conversion validity
+use the current broker rule;
 `configs/resting_mid.yml` = all pairs, USD 100k, named reference profile, now equal to the defaults;
 `configs/legacy_baseline.yml` = original six pairs, 1,000 base units, old 2 s reference and strict quote gates.
 The defaults are a documented rule choice, not a fitted winner.
