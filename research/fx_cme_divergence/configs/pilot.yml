@@ -7,10 +7,15 @@ pairs: [EURGBP, EURAUD, EURNZD, EURUSD, EURCAD, EURCHF, EURJPY,
 providers: [Broadway]
 stage: baseline
 latency_ms: 100
-stale_ms: 2000  # broker freshness only
-frozen_max_age_s: 2  # legacy reference gates; opt in to resting_mid.yml separately
-indicative_max_age_s: 2
-indicative_crossed_mid: false
+stale_ms: 2000  # persistence continuity and preclosure basis CME age only
+traded_side_max_age_s: 240  # freshness of the side we trade and its USD conversion
+untraded_side_max_age_s: null  # the other side may be stale
+broker_row_max_age_s: null  # no whole-row age rule
+require_quote_size: false
+reject_flagged_quotes: false
+frozen_max_age_s: 300  # last trade before the close, generous closure allowance
+indicative_max_age_s: 3600  # resting pre-open book may be an hour old
+indicative_crossed_mid: true  # crossed CME pre-open legs use their mid
 persistence_ms: 1000
 notional_usd: 100000
 quantity: null  # set only to reproduce the old fixed-base-unit experiment

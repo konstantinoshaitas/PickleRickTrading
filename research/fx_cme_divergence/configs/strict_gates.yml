@@ -1,0 +1,31 @@
+# Old pre-2026-10 behaviour, kept only for comparison. It rejects the CME pre-open.
+# Both broker sides must be fresh within 2 s, quote flags and sizes are enforced,
+# the whole row must be at most 2 s old, and crossed CME books are rejected.
+pairs: [EURGBP, EURAUD, EURNZD, EURUSD, EURCAD, EURCHF, EURJPY,
+        GBPAUD, GBPNZD, GBPUSD, GBPCAD, GBPCHF, GBPJPY,
+        AUDNZD, AUDUSD, AUDCAD, AUDCHF, AUDJPY,
+        NZDUSD, NZDCAD, NZDCHF, NZDJPY, USDCAD, USDCHF, USDJPY, CADCHF, CADJPY, CHFJPY]
+providers: [Broadway]
+stage: baseline
+latency_ms: 100
+stale_ms: 2000  # persistence continuity and preclosure basis CME age
+traded_side_max_age_s: 2
+untraded_side_max_age_s: 2
+broker_row_max_age_s: 2
+require_quote_size: true
+reject_flagged_quotes: true
+frozen_max_age_s: 2
+indicative_max_age_s: 2
+indicative_crossed_mid: false
+persistence_ms: 1000
+notional_usd: 100000
+quantity: null
+cash: 100000
+commission_bps: null
+financing_quote: null
+slippage_bps: 0
+exit_wait_s: 30
+max_hold_s: 7200
+roll_buffer_days: 2
+min_basis_samples: 5
+allow_calendar_fallback: false

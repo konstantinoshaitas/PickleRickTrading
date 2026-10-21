@@ -105,10 +105,18 @@ def test_cross_sides_size_and_tenor():
     ("indicative_flags", 1, "disabled_or_indicative_flag"), ("disabled_flags", 1, "disabled_or_indicative_flag"),
     ("bid", 3, "crossed_or_locked_book"), ("bid_size", 0, "insufficient_size"),
     ("recv_ns", 20, "received_after_decision"), ("recv_ns", 1, "book_age_exceeded")])
-def test_quote_rejections(column, value, expected):
+def test_old_strict_quote_rejections(column, value, expected):
     frame = leg(1, 2)
     frame[column] = value
-    assert validity(frame, 10, 5, 100).iloc[0] == expected
+    assert validity(frame, 10, 5, 100, require_size=True, require_clean_flags=True).iloc[0] == expected
+
+
+def test_traded_side_only_freshness():
+    frame = leg(1, 2)
+    frame["bid_recv_ns"], frame["ask_recv_ns"] = -51, 9
+    assert validity(frame, 10, 60, side_max_age_ns=60, traded_side="ask").iloc[0] == ""
+    assert validity(frame, 10, 60, side_max_age_ns=60, traded_side="bid").iloc[0] == \
+        "bid_side_age_exceeded"
 
 
 def test_per_side_staleness_survives_pairing():
@@ -117,7 +125,8 @@ def test_per_side_staleness_survives_pairing():
                          "size": [1]*3, "indicative_flags": [0]*3, "disabled_flags": [0]*3})
     result = broker_snapshots(rows, "Broadway", {"EURUSD": 100000})
     assert result.iloc[-1].bid_recv_ns == 100
-    assert validity(result, result.recv_ns, 50, 1000).iloc[-1] == "bid_side_age_exceeded"
+    assert validity(result, result.recv_ns, 50, 1000,
+                    side_max_age_ns=50).iloc[-1] == "bid_side_age_exceeded"
     assert pd.isna(result.iloc[0].ask)  # Never backfill a future ask.
 
 

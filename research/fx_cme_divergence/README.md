@@ -4,14 +4,31 @@ Python scripts and CLI only; stock `vectorbt` 0.28.1 accounting; no orders, note
 
 * **FROZEN:** take the last CME trade received before the previous session closed. Buy at the broker ask
   if it is sufficiently below the reference; sell at the broker bid if sufficiently above it.
-* **INDICATIVE:** compare the broker's executable side with the CME pre-open indication. With
-  `indicative_crossed_mid: true`, use each futures leg's `(bid + ask) / 2`, then combine the leg mids.
+* **INDICATIVE:** compare the broker's executable side with the CME pre-open indication. By default
+  (`indicative_crossed_mid: true`) use each futures leg's `(bid + ask) / 2`, then combine the leg mids.
   Pre-open books can cross because matching has not started. Their mid is an indication, **not a CME fill**.
 
 Both references carry the median broker–CME basis measured before close. Sunday carries Friday's basis;
 raw and adjusted residuals are retained. CME catching up at reopen is **not** broker convergence.
 The EURAUD 18 October check found that increasing reference age alone recovered no INDICATIVE signal;
 allowing crossed per-leg mids did. That is a sensitivity, not evidence of robust alpha.
+
+## Rules in force (defaults)
+
+| Rule | Exact test | Default value |
+| --- | --- | --- |
+| Broker prices | bid and ask present, finite and > 0 | always |
+| Broker book | bid < ask | always |
+| No look-ahead | quote receive time <= decision time | always |
+| Traded-side freshness | decision time - traded-side receive time <= 240 s; ask for a long, bid for a short, and the same side of the USD conversion pair | `traded_side_max_age_s: 240` |
+| Other broker side | no freshness requirement | `untraded_side_max_age_s: null` |
+| Broker flags / sizes / row age | not tested | `reject_flagged_quotes: false`, `require_quote_size: false`, `broker_row_max_age_s: null` |
+| FROZEN reference | last CME trade before the close, at most 300 s old at the close | `frozen_max_age_s: 300` |
+| INDICATIVE reference | resting pre-open book received since pre-open and before reopen, at most 3600 s old; per-leg mid, crossed books allowed | `indicative_max_age_s: 3600`, `indicative_crossed_mid: true` |
+
+Entry uses the latest broker quote on the traded side as of signal + 100 ms. Exit uses the latest quote on the
+closing side as of reopen + 2 min. Both are accepted while the traded side is within 240 s; there is no wait
+for a new update row. A stale quote on the side we do not trade does not block a trade.
 
 ## Pairs, units and historical contracts
 
@@ -49,29 +66,34 @@ validated the June/September rolls on new real data; inspect that audit before i
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `frozen_max_age_s` | 2 | Maximum last-trade age **at close**, not its age throughout the closure |
-| `indicative_max_age_s` | 2 | Safety cap on time since a pre-open book update; separate from broker age |
-| `indicative_crossed_mid` | false | Opt in to crossed per-leg mids instead of legacy bid/ask reference bounds |
-| `stale_ms` | 2000 | Broker freshness, fill wait and persistence continuity; **never loosened by reference options** |
+| `traded_side_max_age_s` | 240 | Maximum age of the traded side and the USD conversion side at entry/exit |
+| `untraded_side_max_age_s` | null | Optional cap on the other broker side; null means no test |
+| `broker_row_max_age_s` | null | Optional whole-row age cap; null means no test |
+| `require_quote_size` | false | Optional old size rule for broker and reference rows |
+| `reject_flagged_quotes` | false | Optional old indicative/disabled flag rule |
+| `frozen_max_age_s` | 300 | Maximum last-trade age **at close**, not its age throughout the closure |
+| `indicative_max_age_s` | 3600 | Safety cap on time since a pre-open book update; separate from broker age |
+| `indicative_crossed_mid` | true | Combine per-leg mids; crossed pre-open books are allowed |
+| `stale_ms` | 2000 | Persistence continuity and preclosure basis CME age only |
 | `notional_usd` | 100000 | Fixed USD allocation **per trade** |
 
-Profiles: `configs/pilot.yml` = all pairs, USD 100k, conservative legacy reference gates;
-`configs/resting_mid.yml` = all pairs, USD 100k, FROZEN 300 s / INDICATIVE 3600 s / crossed mids ON;
-`configs/legacy_baseline.yml` = original six pairs, 1,000 base units, 2 s reference gates. The last profile
-keeps the original sizing/reference rules, but now defaults to Broadway only. The new mid profile is explicitly
-opt-in, not a fitted winner.
-To isolate age versus crossed-mid effects, copy the small profile outside git and change **one** value.
+Profiles: `configs/pilot.yml` = all pairs, USD 100k, the relaxed defaults above;
+`configs/strict_gates.yml` = all pairs, USD 100k, the old behaviour (both broker sides 2 s, flags and size
+rules, whole-row 2 s, FROZEN/INDICATIVE 2 s, crossed books rejected) for comparison;
+`configs/resting_mid.yml` = all pairs, USD 100k, named reference profile, now equal to the defaults;
+`configs/legacy_baseline.yml` = original six pairs, 1,000 base units, old 2 s reference and strict quote gates.
+The defaults are a documented rule choice, not a fitted winner.
 
 A resting reference must have been received **and generated** since pre-open began. It is not carried
 past reopening. An unexpected close/pause/trading transition during pre-open rejects the session.
-Missing/nonpositive prices, flags and invalid sizes still reject it. Locked reference books were already
-allowed by the legacy implementation. Broker books must remain uncrossed, unlocked, fresh on **both**
-sides and unflagged: a fresh ask does not override a disabled row. Rejection labels now distinguish age,
-future receive time, missing timestamps, crossed books and ended pre-open phases.
+Missing/nonpositive prices reject it. CME flags and sizes are not tested by default; locked books are
+allowed, and crossed books are allowed in mid mode. Broker books must keep bid < ask; only the traded
+side is tested for age, and flags, sizes, the other side and whole-row age are not tested by default.
+Rejection labels distinguish age, future receive time, missing timestamps, crossed books and ended pre-open phases.
 
-USD sizing uses the same provider's causal base/USD ask for buys and bid for sells at entry. Missing fresh
-conversion or insufficient broker size makes entry unfillable. P&L converts quote currency at exit (bid
-for gains, ask for liabilities), including reciprocal CAD/CHF/JPY conversions. `quantity` is only a legacy
+USD sizing uses the same provider's causal base/USD ask for buys and bid for sells at entry. Missing or
+stale conversion on that side makes entry unfillable; broker size is not a default gate. P&L converts quote
+currency at exit (bid for gains, ask for liabilities), including reciprocal CAD/CHF/JPY conversions. `quantity` is only a legacy
 fixed-base-unit override. All trades use independent, fully funded quote-currency vectorbt accounts:
 **no shared capital limit, leverage, netting or preference between pairs**. This is an all-pairs realized
 P&L analysis, not a margin/capital-constrained portfolio simulator.
@@ -137,15 +159,36 @@ contract terms, audits and trade/portfolio result tables remain CSV for spreadsh
 **Old CSV bundles are not readable by this version:** rerun `broker-fetch` for old broker CSV exports, then
 rerun `normalize`; there is no CSV fallback. Existing raw Databento caches do not need downloading again.
 
-Compare the opt-in rule without fetching again or overwriting the baseline:
+### Run the full 180 days from the existing sealed bundle (no re-fetch)
+
+The sealed bundle already holds the raw broker quotes (bid/ask receive times, sizes, flags) and CME data.
+The broker and reference gates are applied in `prepare`, not in `normalize`, so **no fetch, broker-fetch,
+estimate or normalize is needed**. Change only the workspace path; the config and bundle stay as shown.
 
 ```bash
-V="$W/resting-mid"
-ALT=research/fx_cme_divergence/configs/resting_mid.yml
-$PY -m $M prepare --workspace "$V" --inputs "$W/data/inputs/bundle" \
-  --start 2026-04-23 --end 2026-10-20 --config "$ALT"
-$PY -m $M backtest --workspace "$V" --start 2026-04-23 --end 2026-10-20 --config "$ALT"
-$PY -m $M report --workspace "$V"
+PY=.venv/bin/python
+M=research.fx_cme_divergence
+C=research/fx_cme_divergence/configs/pilot.yml
+B=/home/koko/allprojects/firstmate/data/pickle-fx-full-backtest/ws/data/inputs/bundle
+W=/absolute/path/outside/git/fx-180d-relaxed   # CHANGE THIS
+
+$PY -m $M prepare --workspace "$W" --inputs "$B" \
+  --start 2026-04-23 --end 2026-10-20 --config "$C"
+$PY -m $M backtest --workspace "$W" --start 2026-04-23 --end 2026-10-20 \
+  --config "$C" --stage baseline
+$PY -m $M report --workspace "$W" --stage baseline
+```
+
+For the old strict comparison, use `configs/strict_gates.yml` and a **different** workspace:
+
+```bash
+OLD=research/fx_cme_divergence/configs/strict_gates.yml
+S=/absolute/path/outside/git/fx-180d-strict   # CHANGE THIS
+$PY -m $M prepare --workspace "$S" --inputs "$B" \
+  --start 2026-04-23 --end 2026-10-20 --config "$OLD"
+$PY -m $M backtest --workspace "$S" --start 2026-04-23 --end 2026-10-20 \
+  --config "$OLD" --stage baseline
+$PY -m $M report --workspace "$S" --stage baseline
 ```
 
 `official-inputs` uses bundled **public schedule facts**, not downloaded prices. All seven schedules

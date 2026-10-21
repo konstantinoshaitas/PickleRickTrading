@@ -65,6 +65,34 @@ def entry_size(row, side, config):
     return config.notional_usd/rate, config.notional_usd
 
 
+def quote_rejection(row, side, now_ns, config):
+    """Only the side we trade must be fresh; the other side may be old."""
+    if row.broker_rejection:
+        return row.broker_rejection
+    traded = "ask" if side > 0 else "bid"
+    other = "bid" if side > 0 else "ask"
+    for label, limit in ((traded, config.traded_side_max_age_s),
+                         (other, config.untraded_side_max_age_s)):
+        if limit is None:
+            continue
+        recv = getattr(row, f"{label}_recv_ns", np.nan)
+        if not np.isfinite(recv) or recv > now_ns:
+            return f"{label}_received_after_decision"
+        if now_ns-recv > limit*NS:
+            return f"{label}_side_age_exceeded"
+    return ""
+
+
+def conversion_rejection(row, prefix, label, now_ns, config):
+    """The USD rate is usable only if its used side is present and within the same freshness."""
+    rate = getattr(row, f"{prefix}_{label}", np.nan)
+    recv = getattr(row, f"{prefix}_{label}_recv_ns", np.nan)
+    if (not np.isfinite(rate) or rate <= 0 or not np.isfinite(recv) or
+            recv > now_ns or now_ns-recv > config.traded_side_max_age_s*NS):
+        return "missing_fresh_base_usd_conversion" if prefix == "base_usd" else "missing_fresh_usd_conversion"
+    return ""
+
+
 def trade_signal(frame, candidate, config):
     frame = frame.sort_values("ts_ns").reset_index(drop=True)
     first = frame.iloc[0]
@@ -80,7 +108,7 @@ def trade_signal(frame, candidate, config):
         if row.ts_ns >= row.reopen_ns:
             break
         side = direction(row, threshold(row, candidate)) if row.reference_rejection == "" else 0
-        if side and row.broker_rejection != "":
+        if side and quote_rejection(row, side, row.ts_ns, config):
             side = 0
         if side != last_side or last_time is None or row.ts_ns-last_time > config.stale_ms*1e6:
             began = row.ts_ns if side else None
@@ -102,28 +130,32 @@ def trade_signal(frame, candidate, config):
                  "sunday_carry_anchor": bool(signal.sunday_carry_anchor)})
     earliest = signal.ts_ns + max(1, int(config.latency_ms*1e6))
     entry_side = "ask" if side > 0 else "bid"
-    window = frame[(frame.ts_ns >= earliest) & (frame.ts_ns < signal.reopen_ns) &
-                   (frame.ts_ns <= earliest+int(config.stale_ms*1e6))]
+    # Use the quote in force at signal+latency; do not wait for another update row.
+    earlier = frame[(frame.ts_ns <= earliest) & (frame.ts_ns < signal.reopen_ns)]
     entry = None
     reasons = set()
-    for row in window.itertuples(index=False):
-        reason = row.broker_rejection
+    if not earlier.empty:
+        row = earlier.iloc[-1]
         quantity, notional = entry_size(row, side, config)
+        reason = quote_rejection(row, side, earliest, config)
+        conversion = conversion_rejection(row, "base_usd", "ask" if side > 0 else "bid", earliest, config)
         if reason:
             reasons.add(reason)
         elif not np.isfinite(quantity):
             reasons.add("missing_fresh_base_usd_conversion")
-        elif getattr(row, entry_side+"_size") < quantity:
+        elif conversion:
+            reasons.add(conversion)
+        elif config.require_quote_size and getattr(row, entry_side+"_size") < quantity:
             reasons.add("insufficient_size_for_usd_notional")
         else:
             entry = row
-            break
     if entry is None:
         return {**base, "status": "unfillable_entry",
                 "rejection_reason": "|".join(sorted(reasons)) or "no_quote_within_entry_wait"}
     base.update({"quantity_base": quantity, "notional_usd": notional,
-                 "entry_ns": int(entry.ts_ns), "entry_bid": entry.bid, "entry_ask": entry.ask,
-                 "entry_age_ns": int(max(entry.ts_ns-entry.bid_recv_ns, entry.ts_ns-entry.ask_recv_ns)),
+                 "entry_ns": int(earliest), "entry_quote_ns": int(entry.ts_ns),
+                 "entry_bid": entry.bid, "entry_ask": entry.ask,
+                 "entry_age_ns": int(earliest-getattr(entry, entry_side+"_recv_ns")),
                  "entry_price": float(entry.ask if side > 0 else entry.bid)})
     # Baseline time uses actual reopening event AND its receive availability, not an invented auction.
     deadline = min(int(first.boundary_ns)-1, int(entry.ts_ns+config.max_hold_s*NS))
@@ -143,18 +175,26 @@ def trade_signal(frame, candidate, config):
             if candidate.adverse_multiple and remaining >= initial*candidate.adverse_multiple:
                 target, reason = int(row.ts_ns+max(1, config.latency_ms*1e6)), "adverse_residual_stop"
                 break
-    exits = frame[(frame.ts_ns >= target) & (frame.ts_ns > entry.ts_ns) &
-                  (frame.ts_ns <= min(target+int(config.exit_wait_s*NS), deadline)) &
-                  (frame.broker_rejection == "") &
-                  (frame["bid_size" if side > 0 else "ask_size"] >= quantity)]
-    if exits.empty:
+    # The latest quote on the closing side as of reopen+2 min is in force; no fresh-row wait.
+    exits = frame[(frame.ts_ns <= min(target, deadline)) & (frame.ts_ns > entry.ts_ns)]
+    exit_row = exits.iloc[-1] if not exits.empty else None
+    exit_reason = "missing_exit" if exit_row is None else quote_rejection(exit_row, -side, target, config)
+    if exit_row is not None and not exit_reason:
+        closing = "bid" if side > 0 else "ask"
+        gross_positive = (side > 0 and exit_row.bid >= entry.ask) or (side < 0 and entry.bid >= exit_row.ask)
+        exit_reason = conversion_rejection(exit_row, "usd", "bid" if gross_positive else "ask",
+                                           target, config)
+        if not exit_reason and config.require_quote_size and getattr(exit_row, closing+"_size") < quantity:
+            exit_reason = "insufficient_size_for_usd_notional"
+    if exit_reason:
         return {**base, "status": "unpriced_open", "exit_reason": "missing_exit",
                 "exit_target_ns": target}
-    exit_row = exits.iloc[0]
+    closing = "bid" if side > 0 else "ask"
     return {**base, "status": "closed", "exit_reason": reason, "exit_target_ns": target,
-            "exit_ns": int(exit_row.ts_ns), "exit_bid": exit_row.bid, "exit_ask": exit_row.ask,
+            "exit_ns": int(target), "exit_quote_ns": int(exit_row.ts_ns),
+            "exit_bid": exit_row.bid, "exit_ask": exit_row.ask,
             "exit_price": float(exit_row.bid if side > 0 else exit_row.ask),
-            "exit_age_ns": int(max(exit_row.ts_ns-exit_row.bid_recv_ns, exit_row.ts_ns-exit_row.ask_recv_ns)),
+            "exit_age_ns": int(target-getattr(exit_row, closing+"_recv_ns")),
             "usd_bid": float(exit_row.usd_bid), "usd_ask": float(exit_row.usd_ask)}
 
 

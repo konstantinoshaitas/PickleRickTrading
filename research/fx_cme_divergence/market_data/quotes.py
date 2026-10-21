@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from ..config import LEGS
+from ..config import LEGS, NS
 from ..products import MULTIPLIER, quote_in_usd  # noqa: F401 - normalization also imports MULTIPLIER
 
 
@@ -16,37 +16,64 @@ def asof(left, right, time="ts_ns"):
     return pd.merge_asof(left.sort_values(time), right.sort_values(time), on=time, direction="backward")
 
 
-def validity(frame, now, stale_ns, quantity, allow_locked=False, allow_crossed=False):
+def validity(frame, now, stale_ns=None, quantity=0, allow_locked=False, allow_crossed=False,
+             require_size=False, require_clean_flags=False, side_max_age_ns=None,
+             traded_side=None, untraded_side_max_age_ns=None):
+    """Quote tests; optional rules reproduce the old strict gates when explicitly enabled."""
     reasons = pd.Series("", index=frame.index)
     checks = [
         (frame.bid.isna() | frame.ask.isna() | ~np.isfinite(frame.bid) | ~np.isfinite(frame.ask), "missing_price"),
         ((frame.bid <= 0) | (frame.ask <= 0), "nonpositive_price"),
         (((frame.bid > frame.ask) if allow_locked else (frame.bid >= frame.ask)) &
          (not allow_crossed), "crossed_book" if allow_locked else "crossed_or_locked_book"),
-        ((frame.bid_size <= 0) | (frame.ask_size <= 0) |
-         (frame.bid_size < quantity) | (frame.ask_size < quantity) |
-         frame.bid_size.isna() | frame.ask_size.isna(), "insufficient_size"),
-        ((frame.indicative_flags != 0) | (frame.disabled_flags != 0), "disabled_or_indicative_flag"),
-        (now - frame.recv_ns > stale_ns, "book_age_exceeded"),
-        (frame.recv_ns > now, "received_after_decision"),
-        (frame.recv_ns.isna(), "missing_receive_time"),
     ]
+    if require_size:
+        checks.append(((frame.bid_size <= 0) | (frame.ask_size <= 0) |
+                       (frame.bid_size < quantity) | (frame.ask_size < quantity) |
+                       frame.bid_size.isna() | frame.ask_size.isna(), "insufficient_size"))
+    if require_clean_flags:
+        checks.append(((frame.indicative_flags != 0) | (frame.disabled_flags != 0),
+                       "disabled_or_indicative_flag"))
+    if stale_ns is not None:
+        checks.append((now - frame.recv_ns > stale_ns, "book_age_exceeded"))
+    checks.extend([(frame.recv_ns > now, "received_after_decision"),
+                   (frame.recv_ns.isna(), "missing_receive_time")])
     for label in ("bid", "ask"):
         column = f"{label}_recv_ns"
         if column in frame:
-            checks.extend([(now-frame[column] > stale_ns, f"{label}_side_age_exceeded"),
-                           (frame[column] > now, f"{label}_received_after_decision"),
+            if side_max_age_ns is not None and traded_side in (None, label):
+                checks.append((now-frame[column] > side_max_age_ns, f"{label}_side_age_exceeded"))
+            if (untraded_side_max_age_ns is not None and traded_side is not None and
+                    label != traded_side):
+                checks.append((now-frame[column] > untraded_side_max_age_ns,
+                               f"{label}_side_age_exceeded"))
+            checks.extend([(frame[column] > now, f"{label}_received_after_decision"),
                            (frame[column].isna(), f"missing_{label}_time")])
     for condition, name in reversed(checks):
         reasons.loc[condition.fillna(True)] = name
     return reasons
 
 
+def broker_validity(frame, now, config, traded_side=None):
+    """Default broker rule: real prices, bid below ask, no future quote, traded side <= 240 s."""
+    return validity(frame, now,
+                    stale_ns=None if config.broker_row_max_age_s is None else
+                    config.broker_row_max_age_s*NS,
+                    quantity=config.quantity or 0,
+                    require_size=config.require_quote_size,
+                    require_clean_flags=config.reject_flagged_quotes,
+                    side_max_age_ns=config.traded_side_max_age_s*NS if traded_side else None,
+                    traded_side=traded_side,
+                    untraded_side_max_age_ns=None if config.untraded_side_max_age_s is None else
+                    config.untraded_side_max_age_s*NS)
+
 def reciprocal(frame):
     """Invert USD/foreign to foreign/USD or vice versa, swapping prices AND available base units."""
     result = frame.copy()
     result["bid"], result["ask"] = 1/frame.ask, 1/frame.bid
     result["bid_size"], result["ask_size"] = frame.ask_size*frame.ask, frame.bid_size*frame.bid
+    if {"bid_recv_ns", "ask_recv_ns"} <= set(frame):
+        result["bid_recv_ns"], result["ask_recv_ns"] = frame.ask_recv_ns, frame.bid_recv_ns
     return result
 
 
@@ -67,7 +94,7 @@ def future_at(quotes, times, contracts, pair, config, minimum_recv=None, phase_e
     legs = []
     indicative = minimum_recv is not None
     mid_mode = indicative and config.indicative_crossed_mid
-    stale_ns = (config.indicative_max_age_s*1e9 if indicative else config.stale_ms*1e6)
+    stale_ns = config.indicative_max_age_s*NS if indicative else config.stale_ms*1e6
     for root in LEGS[pair]:
         contract = contracts[root]
         source = quotes[(quotes.venue == "cme") & (quotes.instrument_id == contract["instrument_id"])].copy()
@@ -94,11 +121,18 @@ def future_at(quotes, times, contracts, pair, config, minimum_recv=None, phase_e
         result = reciprocal(pricing[0]) if pair.startswith("USD") else pricing[0]
     result = result.reset_index(drop=True)
     result["ts_ns"] = np.asarray(times)
-    result["rejection"] = validity(result, result.ts_ns, stale_ns, config.quantity or 0, allow_locked=True)
+    result["rejection"] = validity(result, result.ts_ns, stale_ns, config.quantity or 0,
+                                    allow_locked=True, allow_crossed=mid_mode,
+                                    require_size=config.require_quote_size,
+                                    require_clean_flags=config.reject_flagged_quotes,
+                                    side_max_age_ns=stale_ns)
     # Validate ORIGINAL legs; mid arithmetic must not hide missing prices, flags or a phase boundary.
     for leg in legs:
         bad = validity(leg, result.ts_ns, stale_ns, config.quantity or 0,
-                       allow_locked=True, allow_crossed=mid_mode)
+                       allow_locked=True, allow_crossed=mid_mode,
+                       require_size=config.require_quote_size,
+                       require_clean_flags=config.reject_flagged_quotes,
+                       side_max_age_ns=stale_ns)
         result.loc[bad != "", "rejection"] = bad[bad != ""]
     if phase_end is not None:
         result.loc[result.ts_ns >= phase_end, "rejection"] = "preopen_ended"
@@ -125,17 +159,19 @@ def frozen_trade(trades, contracts, pair, close, stale_ns):
 
 
 def usd_rates(quotes, provider, currency, times, config):
-    """Causal, executable USD per currency unit, including reciprocal CAD/CHF/JPY quotes."""
+    """Causal USD per currency unit; the signal checks only the side it actually uses."""
     if currency == "USD":
-        return pd.DataFrame({"bid": np.ones(len(times)), "ask": np.ones(len(times))})
+        return pd.DataFrame({"bid": np.ones(len(times)), "ask": np.ones(len(times)),
+                             "bid_recv_ns": np.asarray(times), "ask_recv_ns": np.asarray(times)})
     pair, inverse = quote_in_usd(currency)
     source = quotes[(quotes.venue == "broker") & (quotes.provider == provider) & (quotes.pair == pair)].copy()
     source["ts_ns"] = source.recv_ns
     fx = asof(pd.DataFrame({"ts_ns": np.asarray(times)}), source).reset_index(drop=True)
-    good = validity(fx, fx.ts_ns, config.stale_ms*1e6, config.quantity or 0) == ""
+    good = validity(fx, fx.ts_ns) == ""
     if inverse:
         fx = reciprocal(fx)
-    return pd.DataFrame({"bid": fx.bid.where(good), "ask": fx.ask.where(good)})
+    return pd.DataFrame({"bid": fx.bid.where(good), "ask": fx.ask.where(good),
+                         "bid_recv_ns": fx.bid_recv_ns, "ask_recv_ns": fx.ask_recv_ns})
 
 
 def prepare(tables, audits, config):
@@ -166,7 +202,7 @@ def prepare(tables, audits, config):
                     if basis.empty:
                         raise ValueError("no liquid preclosure broker basis observations")
                     future = future_at(quotes, basis.recv_ns.to_numpy(), contracts, pair, config)
-                    valid = ((validity(basis, basis.recv_ns, config.stale_ms*1e6, config.quantity or 0) == "") &
+                    valid = ((broker_validity(basis, basis.recv_ns, config) == "") &
                              (future.rejection == ""))
                     differences = ((basis.bid+basis.ask)/2 - (future.bid+future.ask)/2)[valid]
                     if len(differences) < config.min_basis_samples:
@@ -178,12 +214,14 @@ def prepare(tables, audits, config):
                     if active.empty:
                         raise ValueError("no broker closure/reopening coverage")
                     active["ts_ns"] = active.recv_ns.astype("int64")
-                    active["broker_rejection"] = validity(active, active.ts_ns, config.stale_ms*1e6,
-                                                          config.quantity or 0)
+                    # Side freshness depends on trade direction and is evaluated in the signal loop.
+                    active["broker_rejection"] = broker_validity(active, active.ts_ns, config)
                     # Quote currency converts exit P&L; base currency converts entry USD allocation.
                     for currency, prefix in ((pair[3:], "usd"), (pair[:3], "base_usd")):
                         fx = usd_rates(quotes, provider, currency, active.ts_ns, config)
-                        active[prefix+"_bid"], active[prefix+"_ask"] = fx.bid, fx.ask
+                        for label in ("bid", "ask"):
+                            active[f"{prefix}_{label}"] = fx[label]
+                            active[f"{prefix}_{label}_recv_ns"] = fx[f"{label}_recv_ns"]
                     frozen_rejection = ""
                     for reference in ("frozen", "preopen"):
                         frame = active.copy()
