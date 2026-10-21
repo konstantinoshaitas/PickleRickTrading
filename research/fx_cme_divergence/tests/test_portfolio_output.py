@@ -81,3 +81,29 @@ def test_portfolio_combines_pairs_not_parameter_or_provider_alternatives():
     assert len(result["portfolio"]) == 4
     assert result["portfolio"].closed.eq(2).all() and result["portfolio"].net_pnl_usd.eq(10).all()
     assert len(result["by_pair"]) == 8 and len(result["by_week"]) == len(result["by_month"]) == 4
+
+
+def test_html_split_summary_suppresses_partly_unvalued_closes(tmp_path):
+    from ..data_access.storage import seal
+    from ..reporting.summary import report
+
+    t = ns("2026-10-18T22:02:00Z")
+    rows = []
+    for pair, values in (("CHFJPY", [10, np.nan]), ("EURUSD", [10, -3])):
+        for pnl in values:
+            rows.append({"pair": pair, "provider": "Broadway", "arm": "weekday_preopen",
+                         "candidate": "pips_10", "split": "train", "status": "closed",
+                         "reopen_ns": str(t-120*NS), "exit_ns": str(t), "scenario_pnl_usd": pnl,
+                         "gross_pnl_usd": pnl, "pips": 1})
+        rows.append({**rows[-1], "status": "no_signal", "exit_ns": "",
+                     "scenario_pnl_usd": np.nan, "gross_pnl_usd": np.nan})
+    pd.DataFrame(rows).to_csv(tmp_path/"ledger.csv", index=False)
+    (tmp_path/"config.json").write_text("{}")
+    seal(tmp_path, ["ledger.csv", "config.json"], {"synthetic": True})
+
+    report(tmp_path)
+
+    summary = pd.read_csv(tmp_path/"summary.csv").set_index("pair")
+    assert np.isnan(summary.loc["CHFJPY", "scenario_pnl_usd"])
+    assert summary.loc["EURUSD", "scenario_pnl_usd"] == 7
+    assert summary.closed.eq(2).all() and summary.sessions.eq(3).all()
