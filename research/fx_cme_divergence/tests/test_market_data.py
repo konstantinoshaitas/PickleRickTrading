@@ -5,7 +5,7 @@ from ..config import NS, PIP, Config, completed_months, ns
 from ..data_access.normalize import broker_snapshots
 from ..data_access.storage import read_bundle
 from ..market_data.contracts import audit, chicago_ns, select_contract, session_times
-from ..market_data.quotes import asof, prepare, synthetic, validity
+from ..market_data.quotes import Slices, asof, prepare, synthetic, validity
 from .fixtures import make_bundle
 
 
@@ -162,6 +162,22 @@ def test_missing_last_trade_removes_only_the_frozen_arm(bundle, config):
     observed, coverage = prepare(bundle, audits, config)
     assert set(observed.arm) == {"sunday_preopen", "weekday_preopen"}
     assert (coverage.rejection == "").all() and coverage.frozen_rejection.str.contains("FROZEN unavailable").all()
+
+
+def test_indexed_window_matches_the_old_filtered_slice():
+    quotes = pd.DataFrame([{"venue": venue, "provider": provider, "pair": pair, "instrument_id": iid,
+                            "recv_ns": recv, "bid": 1.0, "ask": 1.1}
+                           for venue, provider, pair, iid, recv in [
+                               ("cme", "CME", "", 7, 30), ("cme", "CME", "", 7, 10),
+                               ("cme", "CME", "", 7, 20), ("cme", "CME", "", 8, 20),
+                               ("broker", "Broadway", "EURUSD", 0, 20)]])
+    index = Slices(quotes, ["venue", "instrument_id"])
+    old = quotes[(quotes.venue == "cme") & (quotes.instrument_id == 7) &
+                 (quotes.recv_ns >= 15) & (quotes.recv_ns < 30)].sort_values("recv_ns")
+    assert index.window(("cme", 7), 15, 30).equals(old)
+    # An as-of join sees its own span and the one row before it, never a later row.
+    assert index.span(("cme", 7), [20]).recv_ns.tolist() == [10, 20]
+    assert index.span(("cme", 7), [25]).recv_ns.tolist() == [20]
 
 
 def test_rejected_audit_preserves_exact_ns(bundle, config):
