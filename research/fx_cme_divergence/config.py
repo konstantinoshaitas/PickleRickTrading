@@ -33,10 +33,15 @@ class Config:
     providers: tuple = ("Broadway",)
     stage: str = "baseline"
     latency_ms: float = 100.0
-    stale_ms: float = 2000.0  # executable broker quotes; independent of CME references
-    frozen_max_age_s: float = 2.0  # age at close, NOT elapsed age through the closure
-    indicative_max_age_s: float = 2.0  # unchanged resting book since pre-open
-    indicative_crossed_mid: bool = False  # combine per-leg mids, including crossed books
+    stale_ms: float = 2000.0  # persistence continuity and preclosure basis CME age only
+    traded_side_max_age_s: float = 240.0  # freshness of the side we trade and its USD conversion
+    untraded_side_max_age_s: float | None = None  # strict reuse: also require the other side to be fresh
+    broker_row_max_age_s: float | None = None  # strict reuse: extra whole-row age rule
+    require_quote_size: bool = False  # strict reuse: reject nonpositive/undersized quote rows
+    reject_flagged_quotes: bool = False  # strict reuse: reject indicative/disabled broker rows
+    frozen_max_age_s: float = 300.0  # age at close, NOT elapsed age through the closure
+    indicative_max_age_s: float = 3600.0  # unchanged resting book since pre-open
+    indicative_crossed_mid: bool = True  # combine per-leg mids, including crossed books
     persistence_ms: float = 1000.0
     notional_usd: float = 100000.0  # fixed allocation per independent trade, no pair priority
     quantity: float | None = None  # legacy fixed base units, only for reproducing the old pilot
@@ -71,16 +76,21 @@ class Config:
             value = getattr(self, key)
             if value is not None and (isinstance(value, bool) or not math.isfinite(value) or value < 0):
                 raise ValueError(f"{key} must be finite and nonnegative")
-        for key in ("stale_ms", "frozen_max_age_s", "indicative_max_age_s", "persistence_ms",
-                    "notional_usd", "cash", "exit_wait_s", "max_hold_s"):
+        for key in ("stale_ms", "traded_side_max_age_s", "frozen_max_age_s", "indicative_max_age_s",
+                    "persistence_ms", "notional_usd", "cash", "exit_wait_s", "max_hold_s"):
             value = getattr(self, key)
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{key} must be finite and positive")
+        for key in ("untraded_side_max_age_s", "broker_row_max_age_s"):
+            value = getattr(self, key)
+            if value is not None and (isinstance(value, bool) or not math.isfinite(value) or value <= 0):
+                raise ValueError(f"{key} must be finite and positive or null")
         if self.quantity == 0:
             raise ValueError("quantity must be positive or null (USD-notional sizing)")
         if self.min_basis_samples < 2 or not isinstance(self.min_basis_samples, int):
             raise ValueError("min_basis_samples must be an integer >= 2")
-        for key in ("allow_calendar_fallback", "indicative_crossed_mid"):
+        for key in ("allow_calendar_fallback", "indicative_crossed_mid", "require_quote_size",
+                    "reject_flagged_quotes"):
             if type(getattr(self, key)) is not bool:
                 raise ValueError(f"{key} must be boolean")
 

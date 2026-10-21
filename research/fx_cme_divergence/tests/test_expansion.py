@@ -57,7 +57,8 @@ def test_frozen_age_and_crossed_indicative_mid_do_not_hide_phase_or_missing_data
          "indicative_flags": 0, "disabled_flags": 0}
         for iid, bid, ask in [(1, 1.2, 1.0), (2, .6, .8)]])
     config = Config(indicative_max_age_s=3600)
-    off = future_at(quotes, [20*NS], contracts, "EURAUD", config, minimum_recv=5*NS)
+    off = future_at(quotes, [20*NS], contracts, "EURAUD", replace(config, indicative_crossed_mid=False),
+                    minimum_recv=5*NS)
     assert off.rejection.iloc[0] != ""  # age relaxation alone cannot un-cross a leg
     on = future_at(quotes, [20*NS, 30*NS], contracts, "EURAUD", replace(config, indicative_crossed_mid=True),
                    minimum_recv=5*NS, phase_end=30*NS)
@@ -67,6 +68,20 @@ def test_frozen_age_and_crossed_indicative_mid_do_not_hide_phase_or_missing_data
     quotes.loc[0, "bid"] = float("nan")
     assert future_at(quotes, [20*NS], contracts, "EURAUD", replace(config, indicative_crossed_mid=True),
                      minimum_recv=5*NS).rejection.iloc[0] == "missing_price"
+
+
+def test_crossed_preopen_mid_is_the_default():
+    close = ns("2026-10-16T21:00:00Z")
+    quotes = pd.DataFrame([
+        {"venue": "cme", "instrument_id": iid, "recv_ns": close-NS, "event_ns": close-2*NS,
+         "bid": bid, "ask": ask, "bid_size": 1000000, "ask_size": 1000000,
+         "indicative_flags": 0, "disabled_flags": 0}
+        for iid, bid, ask in [(1, 1.2, 1.0), (2, .6, .8)]])
+    contracts = {"6E": {"instrument_id": 1, "tenor": "2026-09"},
+                 "6A": {"instrument_id": 2, "tenor": "2026-09"}}
+    assert Config().indicative_crossed_mid is True
+    result = future_at(quotes, [close], contracts, "EURAUD", Config(), minimum_recv=close-10*NS)
+    assert result.rejection.iloc[0] == "" and result.reference_crossed.iloc[0]
 
 
 def test_official_holiday_exclusions_and_roll_flag_on_every_root(tmp_path):

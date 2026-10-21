@@ -5,5 +5,5 @@ frozen_max_age_s: 300
 indicative_max_age_s: 3600
 # Combine each leg's (bid+ask)/2. Crossed books are meaningful indications, not executable quotes.
 indicative_crossed_mid: true
-# Broker is what we trade: both sides must still be fresh and unflagged.
+# These reference values are now the defaults; this file stays as a named reference profile.
 notional_usd: 100000
