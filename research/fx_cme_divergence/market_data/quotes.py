@@ -77,6 +77,45 @@ def reciprocal(frame):
     return result
 
 
+class Slices:
+    """Rows of a quote/trade table grouped by key and ordered by receive time.
+
+    Preparing a session used to re-filter the whole quote table once per window; an index built
+    once lets every pass binary-search its own rows instead.
+    """
+
+    def __init__(self, frame, keys):
+        self.frame, self.rows = frame, {}
+        recv = frame.recv_ns.to_numpy()
+        for key, rows in frame.groupby(list(keys), sort=False).indices.items():
+            ordered = rows[np.argsort(recv[rows], kind="stable")]
+            self.rows[key if isinstance(key, tuple) else (key,)] = recv[ordered], ordered
+
+    def window(self, key, start=None, end=None, closed=False):
+        """Rows with start <= recv_ns < end (<= end when closed), in receive order."""
+        empty = np.empty(0, np.int64), np.empty(0, np.int64)
+        recv, rows = self.rows.get(key, empty)
+        lo = 0 if start is None else int(np.searchsorted(recv, start, "left"))
+        hi = len(recv) if end is None else int(np.searchsorted(recv, end, "right" if closed else "left"))
+        return self.frame.iloc[rows[lo:hi]].copy()
+
+    def span(self, key, times):
+        """Rows an as-of join over `times` can reach: their span plus one earlier row."""
+        empty = np.empty(0, np.int64), np.empty(0, np.int64)
+        recv, rows = self.rows.get(key, empty)
+        times = np.asarray(times)
+        if not len(times):
+            return self.frame.iloc[rows[0:0]].copy()
+        lo = max(int(np.searchsorted(recv, times.min(), "left"))-1, 0)
+        hi = int(np.searchsorted(recv, times.max(), "right"))
+        return self.frame.iloc[rows[lo:hi]].copy()
+
+
+def indexed(table, keys):
+    """A prepared index, or a one-off index for a caller that holds a plain table."""
+    return table if isinstance(table, Slices) else Slices(table, keys)
+
+
 def synthetic(numerator, denominator, numerator_tenor, denominator_tenor):
     if numerator_tenor != denominator_tenor:
         raise ValueError("synthetic legs require the same contract tenor")
@@ -91,17 +130,22 @@ def synthetic(numerator, denominator, numerator_tenor, denominator_tenor):
 
 
 def future_at(quotes, times, contracts, pair, config, minimum_recv=None, phase_end=None):
+    quotes = indexed(quotes, ["venue", "instrument_id"])
     legs = []
     indicative = minimum_recv is not None
     mid_mode = indicative and config.indicative_crossed_mid
     stale_ns = config.indicative_max_age_s*NS if indicative else config.stale_ms*1e6
     for root in LEGS[pair]:
         contract = contracts[root]
-        source = quotes[(quotes.venue == "cme") & (quotes.instrument_id == contract["instrument_id"])].copy()
-        if minimum_recv is not None:
-            source = source[(source.recv_ns >= minimum_recv) & (source.event_ns >= minimum_recv)]
-        if phase_end is not None:
-            source = source[(source.recv_ns < phase_end) & (source.event_ns < phase_end)]
+        key = ("cme", contract["instrument_id"])
+        if minimum_recv is None and phase_end is None:
+            source = quotes.span(key, times)  # an as-of join never reads past its own span
+        else:
+            source = quotes.window(key, minimum_recv, phase_end)
+            if minimum_recv is not None:
+                source = source[source.event_ns >= minimum_recv]
+            if phase_end is not None:
+                source = source[source.event_ns < phase_end]
         source["source_recv_ns"] = source.recv_ns
         source["ts_ns"] = source.recv_ns
         source = source.drop(columns=["recv_ns"])
@@ -143,10 +187,11 @@ def future_at(quotes, times, contracts, pair, config, minimum_recv=None, phase_e
 
 
 def frozen_trade(trades, contracts, pair, close, stale_ns):
+    trades = indexed(trades, ["instrument_id"])
     prices, ages, arrivals = [], [], []
     for root in LEGS[pair]:
-        data = trades[(trades.instrument_id == contracts[root]["instrument_id"]) &
-                      (trades.recv_ns <= close) & (trades.event_ns <= close)].sort_values("recv_ns")
+        data = trades.window((contracts[root]["instrument_id"],), None, close, closed=True)
+        data = data[data.event_ns <= close]
         if data.empty or close - int(data.recv_ns.iloc[-1]) > stale_ns:
             raise ValueError("FROZEN unavailable: no pre-close trade within frozen_max_age_s")
         prices.append(float(data.iloc[-1].price))
@@ -164,7 +209,8 @@ def usd_rates(quotes, provider, currency, times, config):
         return pd.DataFrame({"bid": np.ones(len(times)), "ask": np.ones(len(times)),
                              "bid_recv_ns": np.asarray(times), "ask_recv_ns": np.asarray(times)})
     pair, inverse = quote_in_usd(currency)
-    source = quotes[(quotes.venue == "broker") & (quotes.provider == provider) & (quotes.pair == pair)].copy()
+    quotes = indexed(quotes, ["venue", "provider", "pair"])
+    source = quotes.span(("broker", provider, pair), times)
     source["ts_ns"] = source.recv_ns
     fx = asof(pd.DataFrame({"ts_ns": np.asarray(times)}), source).reset_index(drop=True)
     good = validity(fx, fx.ts_ns) == ""
@@ -181,6 +227,10 @@ def prepare(tables, audits, config):
         raise ValueError("quote receive time precedes event time")
     if quotes.duplicated(["venue", "provider", "pair", "instrument_id", "recv_ns"]).any():
         raise ValueError("ambiguous same-timestamp quote; normalize using provider sequence first")
+    # Index the tables once; every pass below then binary-searches its own window.
+    broker = Slices(quotes, ["venue", "provider", "pair"])
+    cme = Slices(quotes, ["venue", "instrument_id"])
+    trades = Slices(tables["trades"], ["instrument_id"])
     for session_id, audit_rows in audits.groupby("session_id"):
         for pair in config.pairs:
             roots = LEGS[pair]
@@ -195,13 +245,12 @@ def prepare(tables, audits, config):
                     for key in ("tenor", "close_ns", "preopen_ns", "reopen_ns", "boundary_ns"):
                         if len({contracts[root][key] for root in roots}) != 1:
                             raise ValueError("maturity/session mismatch between synthetic legs")
-                    source = quotes[(quotes.venue == "broker") & (quotes.provider == provider) &
-                                    (quotes.pair == pair)].sort_values("recv_ns").copy()
-                    basis = source[(source.recv_ns >= first["basis_start_ns"]) &
-                                   (source.recv_ns < first["basis_end_ns"])].reset_index(drop=True)
+                    key = ("broker", provider, pair)
+                    basis = broker.window(key, first["basis_start_ns"],
+                                          first["basis_end_ns"]).reset_index(drop=True)
                     if basis.empty:
                         raise ValueError("no liquid preclosure broker basis observations")
-                    future = future_at(quotes, basis.recv_ns.to_numpy(), contracts, pair, config)
+                    future = future_at(cme, basis.recv_ns.to_numpy(), contracts, pair, config)
                     valid = ((broker_validity(basis, basis.recv_ns, config) == "") &
                              (future.rejection == ""))
                     differences = ((basis.bid+basis.ask)/2 - (future.bid+future.ask)/2)[valid]
@@ -209,8 +258,8 @@ def prepare(tables, audits, config):
                         raise ValueError("insufficient valid preclosure basis observations")
                     anchor = float(differences.median())
                     volatility = float(differences.std(ddof=1))
-                    active = source[(source.recv_ns >= first["close_ns"]) &
-                                    (source.recv_ns < first["boundary_ns"])].reset_index(drop=True)
+                    active = broker.window(key, first["close_ns"],
+                                           first["boundary_ns"]).reset_index(drop=True)
                     if active.empty:
                         raise ValueError("no broker closure/reopening coverage")
                     active["ts_ns"] = active.recv_ns.astype("int64")
@@ -218,7 +267,7 @@ def prepare(tables, audits, config):
                     active["broker_rejection"] = broker_validity(active, active.ts_ns, config)
                     # Quote currency converts exit P&L; base currency converts entry USD allocation.
                     for currency, prefix in ((pair[3:], "usd"), (pair[:3], "base_usd")):
-                        fx = usd_rates(quotes, provider, currency, active.ts_ns, config)
+                        fx = usd_rates(broker, provider, currency, active.ts_ns, config)
                         for label in ("bid", "ask"):
                             active[f"{prefix}_{label}"] = fx[label]
                             active[f"{prefix}_{label}_recv_ns"] = fx[f"{label}_recv_ns"]
@@ -227,7 +276,7 @@ def prepare(tables, audits, config):
                         frame = active.copy()
                         if reference == "frozen":
                             try:
-                                price, age, arrival = frozen_trade(tables["trades"], contracts, pair,
+                                price, age, arrival = frozen_trade(trades, contracts, pair,
                                                                   first["close_ns"], config.frozen_max_age_s*1e9)
                             except ValueError as exc:  # A missing last trade removes only the frozen arm.
                                 frozen_rejection = str(exc)
@@ -241,7 +290,7 @@ def prepare(tables, audits, config):
                         else:
                             # Market-data availability includes a conservative feed latency allowance.
                             ref_times = frame.ts_ns.to_numpy() - int(config.latency_ms*1e6)
-                            ref = future_at(quotes, ref_times, contracts, pair, config,
+                            ref = future_at(cme, ref_times, contracts, pair, config,
                                             minimum_recv=first["preopen_ns"], phase_end=first["reopen_ns"])
                             frame["reference_bid"], frame["reference_ask"] = ref.bid, ref.ask
                             frame["reference_recv_ns"] = ref.recv_ns
