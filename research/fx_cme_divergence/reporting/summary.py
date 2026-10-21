@@ -29,7 +29,10 @@ def report(directory):
         unfillable=("status", lambda x: (x == "unfillable_entry").sum())).reset_index()
     if "scenario_pnl_usd" in ledger:
         ledger["scenario_pnl_usd"] = pd.to_numeric(ledger.scenario_pnl_usd, errors="coerce")
-        totals = ledger.groupby(keys, dropna=False).scenario_pnl_usd.sum(min_count=1).rename("scenario_pnl_usd")
+        # No-entry rows have no P&L; a missing valuation on a closed trade invalidates the total.
+        closed = ledger[ledger.status == "closed"]
+        totals = closed.groupby(keys, dropna=False).scenario_pnl_usd.agg(
+            lambda values: values.sum(min_count=len(values))).rename("scenario_pnl_usd")
         summary = summary.merge(totals, on=keys, how="left")
     summary.to_csv(directory/"summary.csv", index=False)
     portfolios = summaries(ledger)
