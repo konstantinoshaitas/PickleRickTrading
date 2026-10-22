@@ -8,6 +8,8 @@ import pandas as pd
 from ..config import LEGS, NS, ns
 from ..market_data.contracts import CALENDAR_URL, chicago_ns
 from ..products import PRODUCTS, ROOTS, SOURCES
+from .fetch_cme_calendar import END as EXTENSION_END
+from .fetch_cme_calendar import EXTENSION_RETRIEVED
 
 INPUTS = Path(__file__).resolve().parents[1]/"configs"
 RETRIEVED = "2026-10-20"
@@ -22,15 +24,14 @@ def calendar(config, output):
     rows = []
     for row in source.itertuples(index=False):
         close, preopen, reopen = map(ns, (row.close_utc, row.preopen_utc, row.reopen_utc))
-        retrieved = getattr(row, "calendar_retrieved", None) or (
-            "2026-10-21" if row.reopen_utc < "2026-04-23" else RETRIEVED)
+        retrieved = EXTENSION_RETRIEVED if row.reopen_utc < EXTENSION_END.isoformat() else RETRIEVED
         if not ns(config.start+"T00:00:00Z") <= reopen < ns(config.end+"T00:00:00Z"):
             continue
         for root in roots:
             rows.append({"session_id": row.session_id, "root": root, "kind": row.kind,
                          "basis_start_ns": close-31*60*NS, "basis_end_ns": close-60*NS,
                          "close_ns": close, "preopen_ns": preopen, "reopen_ns": reopen, "boundary_ns": reopen+600*NS,
-                         "calendar_source": getattr(row, "calendar_source", CALENDAR_URL),
+                         "calendar_source": CALENDAR_URL,
                          "calendar_version": f"CME-product-schedules-retrieved-{retrieved}"})
     if not rows:
         raise ValueError("no complete sourced sessions in requested range")

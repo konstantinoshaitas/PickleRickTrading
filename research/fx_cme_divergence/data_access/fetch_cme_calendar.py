@@ -15,6 +15,7 @@ SOURCE = "https://www.cmegroup.com/trading-hours.html"
 API = "https://www.cmegroup.com/services/trading-hours-by-product"
 CHICAGO = ZoneInfo("America/Chicago")
 START, END = date(2026, 1, 1), date(2026, 4, 23)
+EXTENSION_RETRIEVED = "2026-10-21"
 SESSIONS = Path(__file__).resolve().parents[1] / "configs/cme_sessions_2026.csv"
 EXCLUSIONS = SESSIONS.with_name("cme_exclusions_2026.csv")
 
@@ -89,30 +90,23 @@ def merge(path, rows, key, replace_start, replace_end):
                 if field not in fields:
                     fields.append(field)
         existing = [row for row in reader if not replace_start <= row[key][:10] < replace_end]
-    for row in existing:
-        if "calendar_source" in fields and not row.get("calendar_source"):
-            row["calendar_source"] = SOURCE
-        if "calendar_retrieved" in fields and not row.get("calendar_retrieved"):
-            row["calendar_retrieved"] = "2026-10-20"
-    added = rows
     with path.open("w", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
-        writer.writerows(sorted(existing + added, key=lambda row: row[key]))
+        writer.writerows(sorted(existing + rows, key=lambda row: row[key]))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json-dir", type=Path, help="monthly JSON fetched via visible Chrome if Python is blocked")
     args = parser.parse_args()
-    retrieved = datetime.now(UTC).date().isoformat()
     monthly = []
     for year, month in ((2025, 12), (2026, 1), (2026, 2), (2026, 3), (2026, 4)):
         monthly.extend(month_schedules(year, month, args.json_dir))
-    rows, exclusions = build(monthly, retrieved)
+    rows, exclusions = build(monthly, EXTENSION_RETRIEVED)
     merge(SESSIONS, rows, "reopen_utc", START.isoformat(), END.isoformat())
     merge(EXCLUSIONS, exclusions, "date", START.isoformat(), END.isoformat())
-    print(f"sessions={len(rows)} exclusions={len(exclusions)} source={SOURCE} retrieved={retrieved}")
+    print(f"sessions={len(rows)} exclusions={len(exclusions)} source={SOURCE} retrieved={EXTENSION_RETRIEVED}")
 
 
 if __name__ == "__main__":
