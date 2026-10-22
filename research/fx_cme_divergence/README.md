@@ -191,12 +191,13 @@ $PY -m $M backtest --workspace "$S" --start 2026-04-23 --end 2026-10-20 \
 $PY -m $M report --workspace "$S" --stage baseline
 ```
 
-`official-inputs` uses bundled **public schedule facts**, not downloaded prices. All seven schedules
-were identical. It includes holiday early closes and records incomplete cycles in `calendar_exclusions.csv`:
-May 25 / Sep 7 lacked a new close; Jun 20 / Jul 4 had Saturday 05:00 opens without pre-open. Those opens
-are excluded, not guessed. The official Saturday 17:00 closes are retained for the following Sundays;
-**status must confirm them**. Do not enable calendar fallback to force those questionable sessions through.
-The bundled calendar covers only this resolved window; a later window requires newly sourced inputs.
+`official-inputs` uses bundled **public schedule facts**, not downloaded prices. The calendar covers
+2026-01-01 through 2026-10-20; all seven CME FX roots have identical schedules. It includes holiday
+early closes and records incomplete cycles in `calendar_exclusions.csv`; ambiguous opens are excluded,
+not guessed. The official Saturday 17:00 closes are retained for the following Sundays; **status must
+confirm them**. Do not enable calendar fallback to force questionable sessions through. Regenerate the
+Jan-Apr extension with `python research/fx_cme_divergence/data_access/fetch_cme_calendar.py`; if CME
+blocks Python, pass monthly Chrome-fetched JSON files with `--json-dir`.
 `terms.csv` is generated offline from your receipted historical definitions, checking each root's CME rule.
 Business-day exceptions that disagree are listed in `terms_exclusions.csv`, never silently assigned dates.
 

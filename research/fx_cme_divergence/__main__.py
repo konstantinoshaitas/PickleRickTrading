@@ -29,7 +29,7 @@ def parser():
     subs = p.add_subparsers(dest="command", parser_class=Parser)
     descriptions = {
         "demo": "Generate deterministic synthetic inputs, never empirical data",
-        "official-inputs": "Write the sourced 180-day CME calendar; optionally verify downloaded contract terms",
+        "official-inputs": "Write the sourced 2026 CME calendar; optionally verify downloaded contract terms",
         "estimate": "Free metadata estimate for all four CME schemas; no data download",
         "fetch": "Download only after complete fresh USD 0 estimates (no credits)",
         "broker-fetch": "Bounded read-only LP export using explicit ch-axi credentials",

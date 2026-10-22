@@ -12,6 +12,8 @@ import pytest
 from .. import __main__ as cli
 from ..config import Config, load_config
 from ..data_access import providers
+from ..data_access.fetch_cme_calendar import build as build_calendar
+from ..data_access.fetch_cme_calendar import merge as merge_calendar
 from ..data_access.storage import digest, read_bundle, seal, verify
 from .fixtures import make_bundle
 
@@ -58,6 +60,32 @@ def zero():
 
 def test_all_four_schemas_are_always_estimated():
     assert [r.schema for r in batch()] == ["definition", "status", "mbp-1", "trades"]
+
+
+def test_calendar_extension_excludes_open_without_previous_close_and_preopen():
+    schedules = [
+        ("2025-12-31", [{"eventTime": "16:00", "marketEventType": "closed"}]),
+        ("2026-01-01", [{"eventTime": "16:00", "marketEventType": "preopen"},
+                        {"eventTime": "17:00", "marketEventType": "open"}]),
+        ("2026-01-02", [{"eventTime": "17:00", "marketEventType": "open"}]),
+    ]
+    rows, exclusions = build_calendar(schedules, "2026-10-21")
+    assert rows[0]["session_id"] == "weekday-2026-01-01"
+    assert exclusions[0]["date"] == "2026-01-02"
+
+
+def test_calendar_merge_keeps_rows_outside_replacement_window(tmp_path):
+    path = tmp_path / "sessions.csv"
+    path.write_text(
+        "session_id,kind,close_utc,preopen_utc,reopen_utc\n"
+        "sunday-2026-04-19,sunday,a,b,2026-04-19T22:00:00+00:00\n"
+        "sunday-2026-04-26,sunday,c,d,2026-04-26T22:00:00+00:00\n"
+    )
+    replacement = [{"session_id": "weekday-2026-04-19", "kind": "weekday",
+                    "close_utc": "x", "preopen_utc": "y", "reopen_utc": "2026-04-19T23:00:00+00:00"}]
+    merge_calendar(path, replacement, "reopen_utc", "2026-01-01", "2026-04-23")
+    rows = pd.read_csv(path).to_dict("records")
+    assert [row["session_id"] for row in rows] == ["weekday-2026-04-19", "sunday-2026-04-26"]
 
 
 def test_zero_estimate_fetches_with_zero_cap_and_records_provenance(tmp_path):
